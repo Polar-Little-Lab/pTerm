@@ -1,0 +1,5 @@
+#!/bin/sh
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+PATH="$ROOT/.tools/runtime/node_modules/.bin:$PATH"
+export PATH
+exec "$ROOT/.tools/runtime/node_modules/.bin/node" "$ROOT/.tools/rea/node_modules/rea-agents/scripts/rea.mjs" "$@"

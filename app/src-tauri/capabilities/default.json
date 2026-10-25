@@ -1,0 +1,1 @@
+{"identifier":"main-window","description":"Local main window, native theme and user-selected file dialogs","windows":["main"],"permissions":["core:default","core:window:allow-set-theme","core:window:allow-set-background-color","dialog:allow-open","dialog:allow-save"]}

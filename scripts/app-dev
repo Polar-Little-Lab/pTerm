@@ -1,0 +1,6 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export PATH="$HOME/.cargo/bin:$ROOT/.tools/runtime/node_modules/.bin:$PATH"
+cd "$ROOT/app"
+exec npm run tauri -- dev

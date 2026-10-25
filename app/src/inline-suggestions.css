@@ -1,0 +1,9 @@
+
+.inline-suggestions{position:absolute;z-index:15;width:min(380px,calc(100% - 16px));padding:6px;background:var(--surface);color:var(--text);border:1px solid var(--border);border-radius:10px;box-shadow:0 8px 28px #0002}
+.inline-suggestions-label{display:flex;justify-content:space-between;gap:12px;padding:6px 8px;font-size:11px;color:var(--muted)}
+.inline-suggestions-label span{font-size:10px}
+.inline-suggestions button{display:flex;align-items:center;justify-content:space-between;width:100%;gap:12px;border:0;background:transparent;color:inherit;text-align:left;padding:9px 8px;border-radius:6px}
+.inline-suggestions button:first-of-type,.inline-suggestions button:hover{background:var(--surface-soft)}
+.inline-suggestions code{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:12px}
+.inline-suggestions code span{color:var(--muted)}
+.inline-suggestions kbd{font-size:10px;flex:none}
