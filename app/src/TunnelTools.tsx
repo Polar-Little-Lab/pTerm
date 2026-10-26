@@ -1,0 +1,10 @@
+import {useEffect,useState} from 'react';
+import {invoke,isTauri} from '@tauri-apps/api/core';
+import type {Session} from './types';
+type Tunnel={id:string;sessionId:string;localPort:number;host:string;port:number;error?:string};
+export function TunnelTools({current}:{current?:Session}){
+ const [tunnels,setTunnels]=useState<Tunnel[]>([]),[host,setHost]=useState('127.0.0.1'),[port,setPort]=useState('3306'),[local,setLocal]=useState('0'),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ useEffect(()=>{if(!isTauri())return;let live=true;const read=()=>invoke<Tunnel[]>('list_tunnels').then(t=>{if(live)setTunnels(t);}).catch(e=>{if(live)setError(String(e));});void read();const timer=setInterval(read,1000);return()=>{live=false;clearInterval(timer);};},[]);
+ async function start(){setBusy(true);setError('');try{await invoke('start_tunnel',{sessionId:current!.id,host,port:Number(port),localPort:Number(local)});}catch(e){setError(String(e));}finally{setBusy(false);}}
+ return <><p className="modal-description">현재 SSH 연결을 통해 로컬 포트를 원격 서비스에 연결합니다. 이 Mac의 127.0.0.1에서만 접근할 수 있으며 SSH 종료 시 함께 중지됩니다.</p><label>원격 서비스 주소<input value={host} onChange={e=>setHost(e.target.value)}/></label><div className="form-row"><label>원격 포트<input type="number" min={1} max={65535} value={port} onChange={e=>setPort(e.target.value)}/></label><label>로컬 포트 · 0은 자동<input type="number" min={0} max={65535} value={local} onChange={e=>setLocal(e.target.value)}/></label></div><button className="primary" disabled={busy||!isTauri()||current?.kind!=='ssh'||current.status!=='connected'||!host||!/^\d+$/.test(port)||Number(port)<1||Number(port)>65535||!/^\d+$/.test(local)||Number(local)>65535} onClick={()=>void start()}>로컬 터널 시작</button>{error&&<p role="alert">{error}</p>}{tunnels.map(t=><div key={t.id}><p>127.0.0.1:{t.localPort} → {t.host}:{t.port}</p>{t.error&&<p role="alert">{t.error}</p>}<button onClick={()=>void invoke('stop_tunnel',{id:t.id}).catch(e=>setError(String(e)))}>중지</button></div>)}{!isTauri()&&<p>실제 SSH 터널은 macOS 앱에서 사용할 수 있습니다.</p>}</>;
+}

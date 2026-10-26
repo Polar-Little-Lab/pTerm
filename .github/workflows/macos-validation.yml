@@ -1,0 +1,23 @@
+name: macOS validation
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-14
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: rustup toolchain install 1.90.0 --profile minimal
+      - run: npm ci --prefix app
+      - run: npm test --prefix app
+      - run: npm run build --prefix app
+      - run: cargo +1.90.0 test --manifest-path app/src-tauri/Cargo.toml --locked

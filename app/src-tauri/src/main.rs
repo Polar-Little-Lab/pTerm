@@ -1,5 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod files;
+mod tunnels;
+mod text_export;
 mod local;
 mod ssh;
 mod session_end;
@@ -233,7 +235,12 @@ fn main() {
         )))
         .manage(vault::Vault::default())
         .manage(files::Transfers::default())
+        .manage(tunnels::Tunnels::default())
         .invoke_handler(tauri::generate_handler![
+            text_export::save_text_file,
+            tunnels::start_tunnel,
+            tunnels::list_tunnels,
+            tunnels::stop_tunnel,
             take_demo_request,
             connect_ssh,
             local::start_local,
