@@ -1,6 +1,6 @@
 #[path = "../src/remote_forward.rs"]
 mod remote_forward;
-//! Explicit local fixture only. Never reads user SSH configuration or credentials.
+// Explicit local fixture only. Never reads user SSH configuration or credentials.
 #[path = "../src/ssh.rs"]
 mod ssh;
 use std::time::Duration;

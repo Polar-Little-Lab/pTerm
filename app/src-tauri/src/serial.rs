@@ -11,13 +11,13 @@ pub struct SerialInfo{pub path:String,pub baud:u32}
 #[tauri::command]
 pub fn list_serial_ports()->Result<Vec<String>,String>{let mut ports=Vec::new();for item in std::fs::read_dir("/dev").map_err(|e|e.to_string())?{let item=item.map_err(|e|e.to_string())?;if item.file_name().to_string_lossy().starts_with("cu."){ports.push(item.path().to_string_lossy().to_string());}}ports.sort();Ok(ports)}
 struct SerialPort{file:File,original:libc::termios}
-impl Drop for SerialPort{fn drop(&mut self){unsafe{libc::tcsetattr(self.file.as_raw_fd(),libc::TCSANOW,&self.original);libc::ioctl(self.file.as_raw_fd(),libc::TIOCNXCL);}}}
+impl Drop for SerialPort{fn drop(&mut self){unsafe{libc::tcsetattr(self.file.as_raw_fd(),libc::TCSANOW,&self.original);libc::ioctl(self.file.as_raw_fd(),libc::TIOCNXCL as libc::c_ulong);}}}
 fn open(request:&SerialRequest)->Result<SerialPort,String>{
  if !request.path.starts_with("/dev/cu.")||request.path[5..].contains('/')||!matches!(request.baud,1200|2400|4800|9600|19200|38400|57600|115200|230400)||!matches!(request.data_bits,7|8)||!matches!(request.stop_bits,1|2)||!matches!(request.parity.as_str(),"none"|"even"|"odd")||!matches!(request.flow.as_str(),"none"|"software"|"hardware"){return Err("시리얼 설정을 확인하세요.".into());}
  let file=OpenOptions::new().read(true).write(true).custom_flags(libc::O_NOCTTY|libc::O_NONBLOCK|libc::O_NOFOLLOW).open(&request.path).map_err(|e|e.to_string())?;
  let fd=file.as_raw_fd();let mut original=unsafe{std::mem::zeroed::<libc::termios>()};
  if unsafe{libc::tcgetattr(fd,&mut original)}!=0{return Err(std::io::Error::last_os_error().to_string());}
- let port=SerialPort{file,original};if unsafe{libc::ioctl(fd,libc::TIOCEXCL)}!=0{return Err(std::io::Error::last_os_error().to_string());}
+ if unsafe{libc::ioctl(fd,libc::TIOCEXCL as libc::c_ulong)}!=0{return Err(std::io::Error::last_os_error().to_string());}let port=SerialPort{file,original};
  let mut settings=original;unsafe{libc::cfmakeraw(&mut settings);if libc::cfsetspeed(&mut settings,request.baud as libc::speed_t)!=0{return Err(std::io::Error::last_os_error().to_string());}}
  settings.c_cflag|=libc::CLOCAL|libc::CREAD;settings.c_cflag&=!(libc::CSIZE|libc::PARENB|libc::PARODD|libc::CSTOPB|libc::CRTSCTS);settings.c_cflag|=if request.data_bits==7{libc::CS7}else{libc::CS8};
  if request.parity!="none"{settings.c_cflag|=libc::PARENB;settings.c_iflag|=libc::INPCK;}if request.parity=="odd"{settings.c_cflag|=libc::PARODD;}if request.stop_bits==2{settings.c_cflag|=libc::CSTOPB;}if request.flow=="hardware"{settings.c_cflag|=libc::CRTSCTS;}if request.flow=="software"{settings.c_iflag|=libc::IXON|libc::IXOFF;}
