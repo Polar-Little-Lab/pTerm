@@ -22,7 +22,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{State, ipc::Channel};
+use tauri::{Manager, State, ipc::Channel};
 use tokio::sync::{mpsc, watch};
 
 enum Input {
@@ -279,11 +279,12 @@ fn main() {
             use tauri::{Manager,Emitter};
             static EXITING: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
+            static EXIT_FINISHED:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                if EXITING.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                    return;
-                }
+                if EXIT_FINISHED.load(std::sync::atomic::Ordering::SeqCst){return;}
                 api.prevent_exit();
+                if EXITING.swap(true, std::sync::atomic::Ordering::SeqCst) {return;}
+
                 let logs=app.state::<file_logs::Logs>().inner().clone();
                 let _=app.emit("prepare-exit",());
                 let sessions = app.state::<Sessions>().inner().clone();
@@ -301,6 +302,7 @@ fn main() {
                         tokio::time::sleep(Duration::from_millis(20)).await;
                     }
                     let _=tokio::time::timeout(Duration::from_secs(3),tauri::async_runtime::spawn_blocking(move||logs.finish())).await;
+                    EXIT_FINISHED.store(true,std::sync::atomic::Ordering::SeqCst);
                     app.exit(0);
                 });
             }

@@ -81,3 +81,8 @@
 .native-connections fieldset{border:1px solid var(--line);border-radius:10px;margin:18px 0;padding:12px}
 .tools-output code,.modal code{overflow-wrap:anywhere}
 .file-log-badge{font-size:9px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--text-muted)}.file-log-badge.has-error{color:#c45b50}
+
+.modal:has(.tools-nav) details{margin:16px 0;padding:12px;border:1px solid var(--line);border-radius:8px}
+.modal:has(.tools-nav) details>label:not(.check-inline){display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.modal:has(.tools-nav) .check-inline{display:flex;align-items:center;gap:8px}
+.modal:has(.tools-nav) summary{cursor:pointer;font-weight:600}

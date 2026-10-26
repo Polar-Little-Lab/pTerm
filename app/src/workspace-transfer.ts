@@ -1,4 +1,4 @@
-import {validPreferences,resolvePreferences} from "./session-preferences";
+import { validPreferences, resolvePreferences } from "./session-preferences";
 import {
   validNativeData,
   portableNative,
@@ -36,7 +36,12 @@ export function portableWorkspace(workspace: Workspace): PortableWorkspace {
       authMethod: h.authMethod,
       keyPath: h.keyPath,
       bastionHostId: h.bastionHostId,
-      preferences: h.preferences||workspace.sessionDefaults||Object.keys(workspace.groupPreferences||{}).length?resolvePreferences(workspace,h):undefined,
+      preferences:
+        h.preferences ||
+        workspace.sessionDefaults ||
+        Object.keys(workspace.groupPreferences || {}).length
+          ? resolvePreferences(workspace, h)
+          : undefined,
     })),
     snippets: workspace.snippets.map((s) => ({
       id: s.id,
@@ -117,7 +122,12 @@ export function parsePortable(raw: string): PortableWorkspace {
   return portableWorkspace({
     version: 1,
     ...portableNative(v),
-    hosts: v.hosts,
+    hosts: v.hosts.map((h) => ({
+      ...h,
+      preferences: h.preferences
+        ? { ...h.preferences, startupEnabled: false, logEnabled: false }
+        : undefined,
+    })),
     snippets: v.snippets,
   });
 }

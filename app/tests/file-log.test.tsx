@@ -110,4 +110,23 @@ test("start failure resolves shutdown without sending writes or close for unknow
   assert.match(log.error, /permission denied/);
   assert.equal(log.status, "error");
 });
-test('repeated shutdown while native close is pending closes exactly once',async()=>{let release!:()=>void;let closed=0;const io:LogIO={start:async()=>info,append:async()=>info,stop:()=>{closed++;return new Promise(r=>release=r);}};const log=new FileLog('id',options,io);await new Promise(r=>setTimeout(r,0));const one=log.stop();const two=log.stop();assert.equal(closed,1);release();await Promise.all([one,two]);assert.equal(log.status,'stopped');});
+test("repeated shutdown while native close is pending closes exactly once", async () => {
+  let release!: () => void;
+  let closed = 0;
+  const io: LogIO = {
+    start: async () => info,
+    append: async () => info,
+    stop: () => {
+      closed++;
+      return new Promise((r) => (release = r));
+    },
+  };
+  const log = new FileLog("id", options, io);
+  await new Promise((r) => setTimeout(r, 0));
+  const one = log.stop();
+  const two = log.stop();
+  assert.equal(closed, 1);
+  release();
+  await Promise.all([one, two]);
+  assert.equal(log.status, "stopped");
+});

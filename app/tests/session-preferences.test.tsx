@@ -102,3 +102,33 @@ test("RTF escapes Unicode, braces, slash and removes terminal control sequences"
   assert.ok(!rtf.includes("title"));
   assert.ok(rtf.endsWith("}"));
 });
+test("startup settings require bounded text and booleans", () => {
+  assert.equal(
+    validPreferences({
+      startupEnabled: true,
+      startupCommand: "echo ready\necho done",
+    }),
+    true,
+  );
+  assert.equal(validPreferences({ startupEnabled: "yes" }), false);
+  assert.equal(validPreferences({ startupCommand: "x\0y" }), false);
+  assert.equal(validPreferences({ startupCommand: "가".repeat(6000) }), false);
+});
+test("import preserves automation content but requires re-enabling command execution and disk logging", () => {
+  const source = {
+    ...w,
+    sessionDefaults: {
+      startupEnabled: true,
+      startupCommand: "echo imported",
+      logEnabled: true,
+      logDirectory: "/tmp/logs",
+    },
+  };
+  const data = portableWorkspace(source);
+  assert.equal(data.hosts[0].preferences?.startupEnabled, true);
+  const imported = parsePortable(JSON.stringify(data));
+  assert.equal(imported.hosts[0].preferences?.startupEnabled, false);
+  assert.equal(imported.hosts[0].preferences?.logEnabled, false);
+  assert.equal(imported.hosts[0].preferences?.startupCommand, "echo imported");
+  assert.equal(imported.hosts[0].preferences?.logDirectory, "/tmp/logs");
+});

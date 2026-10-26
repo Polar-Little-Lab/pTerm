@@ -109,7 +109,7 @@ impl Writer {
 pub struct Logs(Arc<Mutex<HashMap<String, Writer>>>);
 impl Logs {
     pub fn is_empty(&self) -> bool {
-        self.0.lock().map(|m| m.is_empty()).unwrap_or(true)
+        self.0.try_lock().map(|m| m.is_empty()).unwrap_or(false)
     }
     pub fn finish(&self) {
         if let Ok(mut map) = self.0.lock() {

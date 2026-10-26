@@ -1,5 +1,5 @@
-import {FileLogControls} from './FileLogControls';
-import {toRtf} from './rtf';
+import { FileLogControls } from "./FileLogControls";
+import { toRtf } from "./rtf";
 import { LogReplay } from "./LogReplay";
 import { AutomationTools } from "./AutomationTools";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -53,6 +53,26 @@ export function TerminalTools({
     [hex, setHex] = useState(false),
     [pattern, setPattern] = useState(""),
     [message, setMessage] = useState("");
+  const [triggerAction, setTriggerAction] = useState<"notify" | "send">(
+      "notify",
+    ),
+    [triggerCommand, setTriggerCommand] = useState(""),
+    [triggerEnter, setTriggerEnter] = useState(true),
+    [triggerRuns, setTriggerRuns] = useState(1),
+    [triggerCooldown, setTriggerCooldown] = useState(5),
+    [triggerReview, setTriggerReview] = useState(false);
+  useEffect(
+    () => setTriggerReview(false),
+    [
+      triggerAction,
+      triggerCommand,
+      triggerEnter,
+      triggerRuns,
+      triggerCooldown,
+      pattern,
+      current?.id,
+    ],
+  );
   useEffect(() => {
     const timer = setInterval(() => redraw((x) => x + 1), 500);
     return () => clearInterval(timer);
@@ -301,8 +321,14 @@ export function TerminalTools({
       )}
       {page === "logs" && capture && current && (
         <>
-          <FileLogControls key={current.id} session={current} onError={onError}/>
-          {onPreferences&&<button onClick={onPreferences}>연결 시 자동 기록 설정</button>}
+          <FileLogControls
+            key={current.id}
+            session={current}
+            onError={onError}
+          />
+          {onPreferences && (
+            <button onClick={onPreferences}>연결 시 자동 기록 설정</button>
+          )}
           <p className="modal-description">
             기록을 켠 이후의 수신 데이터만 메모리에 보관합니다. 최대 1 MiB이며
             초과하면 오래된 기록부터 제거합니다.
@@ -352,7 +378,17 @@ export function TerminalTools({
             >
               재생용 JSON 저장
             </button>
-            <button onClick={()=>void exportText("pterm-session.rtf",toRtf(capture.chunks.map(c=>c.text).join("")),"application/rtf").catch(e=>onError(String(e)))}>RTF 저장</button>
+            <button
+              onClick={() =>
+                void exportText(
+                  "pterm-session.rtf",
+                  toRtf(capture.chunks.map((c) => c.text).join("")),
+                  "application/rtf",
+                ).catch((e) => onError(String(e)))
+              }
+            >
+              RTF 저장
+            </button>
             <button
               onClick={() => {
                 clearCapture(current);
@@ -377,8 +413,9 @@ export function TerminalTools({
       {page === "triggers" && capture && (
         <>
           <p className="modal-description">
-            이 세션에서 문자열이 나타나면 아래 알림에 기록합니다. 같은 규칙은
-            5초 간격으로 감지합니다. 연결을 닫으면 규칙은 사라집니다.
+            문자열을 감지하면 알림 또는 자동 명령을 실행합니다. 자동 전송은 기본
+            1회이며 최대 10회로 제한합니다. 도구 화면을 닫아도 규칙은 유지되며,
+            세션을 닫으면 사라집니다.
           </p>
           <label>
             감지 문자열
@@ -395,10 +432,105 @@ export function TerminalTools({
               onChange={(e) => setMessage(e.target.value)}
             />
           </label>
+          <label>
+            동작
+            <select
+              value={triggerAction}
+              onChange={(e) =>
+                setTriggerAction(e.target.value as "notify" | "send")
+              }
+            >
+              <option value="notify">알림만 기록</option>
+              <option value="send">자동 명령 전송</option>
+            </select>
+          </label>
+          {triggerAction === "send" && (
+            <>
+              <label>
+                자동 전송할 문자열
+                <textarea
+                  aria-label="자동 전송할 문자열"
+                  value={triggerCommand}
+                  maxLength={4096}
+                  onChange={(e) => setTriggerCommand(e.target.value)}
+                />
+              </label>
+              <label className="check-inline">
+                <input
+                  type="checkbox"
+                  checked={triggerEnter}
+                  onChange={(e) => setTriggerEnter(e.target.checked)}
+                />
+                끝에 Enter 전송
+              </label>
+              <div className="form-row">
+                <label>
+                  최대 실행 횟수
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={triggerRuns}
+                    onChange={(e) => setTriggerRuns(Number(e.target.value))}
+                  />
+                </label>
+                <label>
+                  최소 간격 · 초
+                  <input
+                    type="number"
+                    min={1}
+                    max={60}
+                    value={triggerCooldown}
+                    onChange={(e) => setTriggerCooldown(Number(e.target.value))}
+                  />
+                </label>
+              </div>
+              {triggerReview && (
+                <div role="status">
+                  <p>
+                    대상: {current?.host.name}. “{pattern}” 감지 시 최대{" "}
+                    {triggerRuns}회 전송합니다. 출력이 다시 조건과 일치해도
+                    횟수·간격 제한을 적용합니다.
+                  </p>
+                  <pre className="tools-output">
+                    {JSON.stringify(
+                      triggerCommand + (triggerEnter ? "\r" : ""),
+                    )}
+                  </pre>
+                </div>
+              )}
+            </>
+          )}
           <button
-            disabled={!pattern || capture.triggers.length >= 50}
+            disabled={
+              !pattern ||
+              capture.triggers.length >= 50 ||
+              (triggerAction === "send" &&
+                (!triggerCommand ||
+                  !current ||
+                  current.closed ||
+                  current.status !== "connected" ||
+                  !Number.isInteger(triggerRuns) ||
+                  triggerRuns < 1 ||
+                  triggerRuns > 10 ||
+                  !Number.isInteger(triggerCooldown) ||
+                  triggerCooldown < 1 ||
+                  triggerCooldown > 60))
+            }
             onClick={() => {
+              if (triggerAction === "send" && !triggerReview) {
+                setTriggerReview(true);
+                return;
+              }
               capture.triggers.push({
+                action: triggerAction,
+                command:
+                  triggerAction === "send"
+                    ? triggerCommand + (triggerEnter ? "\r" : "")
+                    : undefined,
+                maxRuns: triggerRuns,
+                cooldownMs: triggerCooldown * 1000,
+                runs: 0,
                 id: crypto.randomUUID(),
                 pattern,
                 message,
@@ -408,7 +540,20 @@ export function TerminalTools({
               setMessage("");
             }}
           >
-            규칙 추가
+            {triggerAction === "send"
+              ? triggerReview
+                ? "확인한 자동 명령 등록"
+                : "자동 명령 검토"
+              : "규칙 추가"}
+          </button>
+          <button
+            onClick={() => {
+              for (const r of capture.triggers)
+                if (r.action === "send") r.enabled = false;
+              redraw((x) => x + 1);
+            }}
+          >
+            자동 전송 모두 중지
           </button>
           {capture.triggers.map((rule) => (
             <div className="tools-row" key={rule.id}>
@@ -422,7 +567,26 @@ export function TerminalTools({
                   }}
                 />
                 {rule.pattern}
+                {rule.action === "send"
+                  ? ` · 자동 전송 ${rule.runs || 0}/${rule.maxRuns || 1}${rule.pending ? " (전송 중)" : ""}`
+                  : " · 알림"}
               </label>
+              {rule.action === "send" && (
+                <>
+                  <code>{JSON.stringify(rule.command)}</code>
+                  <button
+                    disabled={rule.pending}
+                    onClick={() => {
+                      rule.runs = 0;
+                      rule.enabled = true;
+                      capture.last.delete(rule.id);
+                      redraw((x) => x + 1);
+                    }}
+                  >
+                    횟수 초기화·다시 준비
+                  </button>
+                </>
+              )}
               <button
                 onClick={() => {
                   capture.triggers = capture.triggers.filter(
@@ -442,8 +606,15 @@ export function TerminalTools({
       )}
       {page === "display" && current && (
         <>
-          {onPreferences&&<button onClick={onPreferences}>기본값·그룹·호스트 상속 설정</button>}
-          <p>아래 변경은 현재 세션에만 적용됩니다. 다음 연결에도 유지하려면 상속 설정에서 저장하세요.</p>
+          {onPreferences && (
+            <button onClick={onPreferences}>
+              기본값·그룹·호스트 상속 설정
+            </button>
+          )}
+          <p>
+            아래 변경은 현재 세션에만 적용됩니다. 다음 연결에도 유지하려면 상속
+            설정에서 저장하세요.
+          </p>
           <label className="check-inline">
             <input
               type="checkbox"

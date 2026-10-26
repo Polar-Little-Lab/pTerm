@@ -1,4 +1,4 @@
-import {writeFileLog} from './file-log';
+import { writeFileLog } from "./file-log";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { Session } from "./types";
@@ -7,6 +7,12 @@ export type Trigger = {
   pattern: string;
   message: string;
   enabled: boolean;
+  action?: "notify" | "send";
+  command?: string;
+  maxRuns?: number;
+  cooldownMs?: number;
+  runs?: number;
+  pending?: boolean;
 };
 export type Capture = {
   received: number;
@@ -51,7 +57,7 @@ export function captureFor(session: Session): Capture {
 export function receiveOutput(session: Session, bytes: Uint8Array) {
   const state = captureFor(session),
     text = state.decoder.decode(bytes, { stream: true });
-  writeFileLog(session,bytes,text);
+  writeFileLog(session, bytes, text);
   if (state.recording) {
     const chunk = {
       time: new Date().toISOString(),
@@ -73,17 +79,65 @@ export function receiveOutput(session: Session, bytes: Uint8Array) {
   state.recent = (state.recent + text).slice(-8192);
   const incoming = state.tail + text;
   for (const rule of state.triggers) {
-    if (!rule.enabled || !rule.pattern || rule.pattern.length > 256) continue;
+    if (
+      !rule.enabled ||
+      !rule.pattern ||
+      rule.pattern.length > 256 ||
+      rule.pending
+    )
+      continue;
+    const limit = Math.max(1, Math.min(10, rule.maxRuns || 1));
+    if (rule.action === "send" && (rule.runs || 0) >= limit) continue;
     const at = incoming.indexOf(
       rule.pattern,
       Math.max(0, state.tail.length - rule.pattern.length + 1),
     );
-    if (at >= 0 && Date.now() - (state.last.get(rule.id) || 0) > 5000) {
+    if (
+      at >= 0 &&
+      Date.now() - (state.last.get(rule.id) || 0) >=
+        Math.max(1000, Math.min(60000, rule.cooldownMs || 5000))
+    ) {
       state.last.set(rule.id, Date.now());
       state.alerts.push(
         `${new Date().toLocaleTimeString()} · ${rule.message || rule.pattern}`,
       );
       state.alerts = state.alerts.slice(-100);
+      if (rule.action === "send") {
+        const command = rule.command || "";
+        if (!command || new TextEncoder().encode(command).length > 16384) {
+          rule.enabled = false;
+          state.alerts.push("자동 명령 형식 오류로 규칙을 중지했습니다.");
+          continue;
+        }
+        rule.pending = true;
+        void Promise.resolve()
+          .then(async () => {
+            if (
+              !rule.enabled ||
+              !state.triggers.includes(rule) ||
+              session.closed ||
+              session.status !== "connected"
+            )
+              return;
+            rule.runs = (rule.runs || 0) + 1;
+            const failures = session.inputFailures || 0;
+            session.terminal.input(command, false);
+            await session.inputQueue;
+            if ((session.inputFailures || 0) !== failures)
+              throw new Error("입력 전송 실패");
+            state.alerts.push(
+              `${new Date().toLocaleTimeString()} · 자동 전송 ${rule.runs}/${limit} · ${rule.pattern}`,
+            );
+          })
+          .catch((error) => {
+            rule.enabled = false;
+            state.alerts.push(`자동 명령 중지 · ${String(error)}`);
+          })
+          .finally(() => {
+            rule.pending = false;
+            state.alerts = state.alerts.slice(-100);
+          });
+      }
     }
   }
   state.tail = incoming.slice(-256);

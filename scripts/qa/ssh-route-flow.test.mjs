@@ -19,7 +19,7 @@ const factory=new Function('connectionRoute','SshRouteRun','hosts','adapter','la
  const recoveryTimers={current:new Map()},recoverLatest={current:()=>{}};const activate=id=>state.active=id,navigate=()=>{},refresh=()=>{},updateSessions=v=>sessionsRef.current=v,tabState={ref:{current:[]},update(fn){this.ref.current=fn(this.ref.current)},add(id){this.ref.current.push(newTab(id))},remove(id){this.update(t=>removeSession(t,id))}};
  const layoutRef={current:null};
  // Preferences and file persistence have dedicated tests; this adapter isolates route control.
- const configureSession=()=>{},stopFileLog=()=>Promise.resolve();
+ const configureSession=()=>{},runLoginCommand=()=>Promise.resolve(),stopFileLog=()=>Promise.resolve();
  const terminalTheme=()=>({});
  class Terminal{cols=80;rows=24;loadAddon(){}writeln(){}write(){}dispose(){}}class FitAddon{}class Channel{}
  const invoke=(cmd,args)=>cmd==='connect_ssh'?adapter(args):Promise.resolve();

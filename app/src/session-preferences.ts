@@ -1,5 +1,7 @@
 import type { Host, Workspace } from "./types";
 export type SessionPreferences = {
+  startupEnabled?: boolean;
+  startupCommand?: string;
   fontSize?: number;
   fontFamily?: string;
   lineHeight?: number;
@@ -14,6 +16,8 @@ export type SessionPreferences = {
   logTimestamps?: boolean;
 };
 export const defaults: Required<SessionPreferences> = {
+  startupEnabled: false,
+  startupCommand: "",
   fontSize: 13,
   fontFamily: '"SFMono-Regular", Menlo, monospace',
   lineHeight: 1.4,
@@ -35,10 +39,23 @@ export function validPreferences(value: unknown): value is SessionPreferences {
   for (const [key, v] of Object.entries(value)) {
     if (!preferenceKeys.includes(key as keyof SessionPreferences)) return false;
     if (v === undefined) continue;
-    if (
-      ["cursorBlink", "closeProtected", "logEnabled", "logTimestamps"].includes(
-        key,
+    if (key === "startupCommand") {
+      if (
+        typeof v !== "string" ||
+        new TextEncoder().encode(v).length > 16000 ||
+        v.includes("\0")
       )
+        return false;
+      continue;
+    }
+    if (
+      [
+        "cursorBlink",
+        "closeProtected",
+        "logEnabled",
+        "logTimestamps",
+        "startupEnabled",
+      ].includes(key)
     ) {
       if (typeof v !== "boolean") return false;
     } else if (key === "cursorStyle") {

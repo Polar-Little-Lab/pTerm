@@ -11,6 +11,8 @@ import {
   preferenceKeys,
 } from "./session-preferences";
 const labels: Record<keyof SessionPreferences, string> = {
+  startupEnabled: "SSH 연결 직후 명령 실행",
+  startupCommand: "연결 직후 실행할 명령",
   fontSize: "글꼴 크기",
   fontFamily: "글꼴 목록",
   lineHeight: "줄 높이",
@@ -87,7 +89,15 @@ export function SessionPreferencesDialog({
           />
           {labels[key]} <small>{own ? "직접 설정" : "상속 중"}</small>
         </label>
-        {typeof value === "boolean" ? (
+        {key === "startupCommand" ? (
+          <textarea
+            aria-label={labels[key]}
+            disabled={!own}
+            value={String(value)}
+            maxLength={4096}
+            onChange={(e) => change(key, e.target.value)}
+          />
+        ) : typeof value === "boolean" ? (
           <label className="check-inline">
             <input
               type="checkbox"
@@ -200,8 +210,20 @@ export function SessionPreferencesDialog({
       )}
       <fieldset>
         <legend>화면·입력</legend>
-        {preferenceKeys.filter((k) => !k.startsWith("log")).map(render)}
+        {preferenceKeys
+          .filter((k) => !k.startsWith("log") && !k.startsWith("startup"))
+          .map(render)}
       </fieldset>
+      <details>
+        <summary>SSH 연결 후 자동 명령</summary>
+        <p>
+          기본 SSH 연결이 완료되면 이 명령을 한 번 전송하고 마지막에 Enter를
+          추가합니다. 재연결 시에도 실행됩니다. 그룹·전체 기본값에 설정하면 해당
+          범위의 모든 SSH 호스트에 적용됩니다. 비밀번호는 넣지 마세요. 외부
+          SSH·로컬·시리얼에는 적용하지 않습니다.
+        </p>
+        {preferenceKeys.filter((k) => k.startsWith("startup")).map(render)}
+      </details>
       <details>
         <summary>파일 기록·용량 제한</summary>
         <p>
@@ -229,6 +251,10 @@ export function SessionPreferencesDialog({
               setMessage(
                 "설정 범위를 확인하세요: 글꼴 9–32, 줄 높이 1–2, 스크롤백 0–100000, 파일 1–100 MiB, 보존 1–100개.",
               );
+              return;
+            }
+            if (effective.startupEnabled && !effective.startupCommand.trim()) {
+              setMessage("연결 후 실행할 명령을 입력하세요.");
               return;
             }
             if (effective.logEnabled && !effective.logDirectory) {
