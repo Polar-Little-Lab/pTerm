@@ -1,3 +1,4 @@
+import {ScriptTools} from "./ScriptTools";
 import { useEffect, useRef, useState } from "react";
 import type { Session } from "./types";
 import { captureFor, exportText } from "./terminal-tools";
@@ -7,6 +8,7 @@ export function AutomationTools({ current }: { current?: Session }) {
       '[\n  {"send": "echo ready\\n"},\n  {"expect": "ready", "timeout": 10000}\n]',
     ),
     [busy, setBusy] = useState(false),
+    [scriptBusy,setScriptBusy]=useState(false),
     [review, setReview] = useState(false),
     [status, setStatus] = useState(""),
     [key, setKey] = useState("KeyH"),
@@ -72,7 +74,7 @@ export function AutomationTools({ current }: { current?: Session }) {
       />
       <div className="tools-row">
         <button
-          disabled={busy || current.closed || current.status !== "connected"}
+          disabled={busy || scriptBusy || current.closed || current.status !== "connected"}
           onClick={() => void run()}
         >
           {review ? "확인한 시나리오 실행" : "실행 내용 확인"}
@@ -91,6 +93,7 @@ export function AutomationTools({ current }: { current?: Session }) {
         </button>
       </div>
       <p role="status">{status}</p>
+      <ScriptTools key={current.id} current={current} disabled={busy} onBusy={setScriptBusy}/>
       <details>
         <summary>입력 기록으로 시나리오 만들기</summary>
         <p>

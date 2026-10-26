@@ -5,6 +5,7 @@ mod socks;
 mod remote_forward;
 mod serial;
 mod programs;
+mod scripts;
 mod text_export;
 mod local;
 mod ssh;
@@ -243,7 +244,8 @@ fn main() {
         .manage(vault::Vault::default())
         .manage(files::Transfers::default())
         .manage(tunnels::Tunnels::default())
-        .invoke_handler(tauri::generate_handler![
+        .manage(scripts::Scripts::default())
+        .invoke_handler(tauri::generate_handler![scripts::start_script,scripts::script_response,scripts::stop_script,
             text_export::save_text_file,
             tunnels::start_tunnel,
             tunnels::list_tunnels,
