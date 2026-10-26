@@ -29,12 +29,18 @@ pub enum ConnectError {
 }
 
 pub struct VerifiedClient {
+    routes: crate::remote_forward::Routes,
     expected: Option<String>,
     observed: Arc<Mutex<Option<String>>>,
 }
 
 impl client::Handler for VerifiedClient {
     type Error = russh::Error;
+    async fn server_channel_open_forwarded_tcpip(&mut self,channel:russh::Channel<client::Msg>,address:&str,port:u32,_origin:&str,_origin_port:u32,reply:client::ChannelOpenHandle,_session:&mut client::Session)->Result<(),Self::Error>{
+        let route=if address=="127.0.0.1"{self.routes.lock().ok().and_then(|routes|routes.get(&port).cloned())}else{None};
+        if let Some(route)=route{crate::remote_forward::accept(channel,reply,route);}
+        Ok(())
+    }
     async fn check_server_key(
         &mut self,
         key: &PublicKeyOrCertificate,
@@ -84,11 +90,19 @@ pub async fn connect(
     mut request: ConnectRequest,
     bastion: Option<Arc<client::Handle<VerifiedClient>>>,
 ) -> Result<(client::Handle<VerifiedClient>, russh::Channel<client::Msg>), ConnectError> {
+    connect_with_routes(request,bastion,Default::default()).await
+}
+pub async fn connect_with_routes(
+    mut request: ConnectRequest,
+    bastion: Option<Arc<client::Handle<VerifiedClient>>>,
+    routes: crate::remote_forward::Routes,
+) -> Result<(client::Handle<VerifiedClient>, russh::Channel<client::Msg>), ConnectError> {
     let valid = validate(&request);
     let password = Zeroizing::new(std::mem::take(&mut request.password));
     valid?;
     let observed = Arc::new(Mutex::new(None));
     let handler = VerifiedClient {
+        routes,
         expected: request.fingerprint.clone(),
         observed: observed.clone(),
     };

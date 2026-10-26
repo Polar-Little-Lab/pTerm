@@ -11,6 +11,7 @@ use tokio::sync::{mpsc, watch};
 pub struct LocalRequest {
     pub cwd: Option<String>,
     pub shell: Option<String>,
+    pub program: Option<crate::programs::ProgramRequest>,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,6 +47,7 @@ fn account() -> Result<(String, String), String> {
     }
 }
 fn command(request: LocalRequest) -> Result<(CommandBuilder, LocalInfo), String> {
+    if let Some(program)=request.program{return crate::programs::command(program);}
     let (home, default_shell) = account()?;
     let shell = request
         .shell
@@ -280,6 +282,7 @@ pub async fn start_local(
         map.insert(
             id.clone(),
             SessionControl {
+                remote_routes: Default::default(),
                 input: tx,
                 cancel,
                 transport: None,
@@ -426,14 +429,14 @@ mod tests {
         assert!(
             command(LocalRequest {
                 cwd: Some("/nonexistent/polar-fixture".into()),
-                shell: Some("/bin/zsh".into())
+                shell: Some("/bin/zsh".into()),program:None
             })
             .is_err()
         );
         assert!(
             command(LocalRequest {
                 cwd: None,
-                shell: Some("/bin/zsh; touch /tmp/not-executed".into())
+                shell: Some("/bin/zsh; touch /tmp/not-executed".into()),program:None
             })
             .is_err()
         );

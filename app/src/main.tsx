@@ -1,3 +1,5 @@
+import {NativeConnectionDialog} from './NativeConnectionDialog';
+import {validNativeData,type NativeLaunch} from './native-connections';
 import './terminal-tools.css';
 import {WorkspaceTransfer} from './WorkspaceTransfer';
 import {TerminalTools,type ToolPage} from './TerminalTools';
@@ -42,9 +44,10 @@ const freshHost=():Host=>({id:crypto.randomUUID(),name:'',host:'',port:22,userna
 const empty:Workspace={version:1,hosts:[],snippets:[]};
 const desktop=isTauri();
 function validWorkspace(value:unknown):value is Workspace {
- const v=value as Workspace;return !!v&&v.version===1&&validCredentials(v.credentials)&&Array.isArray(v.hosts)&&Array.isArray(v.snippets)&&v.hosts.every(h=>h&&typeof h.id==='string'&&typeof h.name==='string'&&typeof h.host==='string'&&typeof h.username==='string'&&(h.bastionHostId===undefined||typeof h.bastionHostId==='string')&&Number.isInteger(h.port)&&h.port>0&&h.port<=65535&&(!h.tags||Array.isArray(h.tags)&&h.tags.every(t=>typeof t==='string')))&&v.snippets.every(s=>s&&typeof s.id==='string'&&typeof s.name==='string'&&typeof s.command==='string');
+ const v=value as Workspace;return !!v&&v.version===1&&validNativeData(v)&&validCredentials(v.credentials)&&Array.isArray(v.hosts)&&Array.isArray(v.snippets)&&v.hosts.every(h=>h&&typeof h.id==='string'&&typeof h.name==='string'&&typeof h.host==='string'&&typeof h.username==='string'&&(h.bastionHostId===undefined||typeof h.bastionHostId==='string')&&Number.isInteger(h.port)&&h.port>0&&h.port<=65535&&(!h.tags||Array.isArray(h.tags)&&h.tags.every(t=>typeof t==='string')))&&v.snippets.every(s=>s&&typeof s.id==='string'&&typeof s.name==='string'&&typeof s.command==='string');
 }
 function App(){
+ const [nativeOpen,setNativeOpen]=useState(false);
  const [transferOpen,setTransferOpen]=useState(false);
  const [toolPage,setToolPage]=useState<ToolPage|null>(null);
  const appearance=useAppearance();const [appearanceOpen,setAppearanceOpen]=useState(false);
@@ -84,18 +87,18 @@ function App(){
   void (async()=>{stop=await listen<string>('vault-auth-stage',event=>setVaultStage(event.payload));if(disposed){stop();return;}stopNotice=await listen<string>('vault-keychain-notice',event=>setNotice(event.payload));if(disposed){stop();stopNotice();return;}const requested=await invoke<boolean>('take_demo_request');if(!disposed)demoPending.current=requested;})().catch(e=>setError(String(e)));
   return()=>{disposed=true;stop?.();stopNotice?.();};
  },[]);
- const openLocal=async(cwd=localCwd,shell=localShell,edge?:PaneEdge)=>{
-  if(sessionsRef.current.length>=16){setNotice('최대 16개 세션까지 열 수 있습니다.');return;}
+ const openLocal=async(cwd=localCwd,shell=localShell,edge?:PaneEdge,native?:NativeLaunch)=>{
+  if(sessionsRef.current.length>=16){setNotice('최대 16개 세션까지 열 수 있습니다.');if(native)throw new Error('최대 16개 세션까지 열 수 있습니다.');return;}
   if(edge&&activeRef.current&&layoutRef.current){
    const area=paneRects(layoutRef.current).find(r=>r.id===activeRef.current),box=document.querySelector('.terminal-deck')?.getBoundingClientRect();
    if(area&&box&&((edge==='left'||edge==='right')?area.width*box.width<360:area.height*box.height<220)){setNotice('분할할 공간이 부족합니다. 영역을 넓히거나 새 탭을 열어주세요.');return;}
   }
-  if(!desktop){setError('로컬 셸은 macOS 앱에서 실행하세요. 브라우저는 화면 미리보기입니다.');return;}if(localStarting.current)return;localStarting.current=true;
+  if(!desktop){setError('로컬 셸은 macOS 앱에서 실행하세요. 브라우저는 화면 미리보기입니다.');return;}if(localStarting.current){if(native)throw new Error('다른 연결이 시작 중입니다. 잠시 후 다시 시도하세요.');return;}localStarting.current=true;
   setNewSession(false);setError('');setMode('terminal');setLayoutOpen(false);setSidebar(false);
   const terminal=new Terminal({cursorBlink:true,fontFamily:'"SFMono-Regular", Menlo, monospace',fontSize:13,lineHeight:1.4,scrollback:5000,theme:terminalTheme()});const fit=new FitAddon();terminal.loadAddon(fit);
-  const number=++localSequence.current;const id=crypto.randomUUID();const session:Session={id,kind:'local',host:{id,name:'로컬 셸',host:'이 Mac',username:'local',port:0},localCwd:cwd,localShell:shell,terminal,fit,status:'connecting',closed:false,inputQueue:Promise.resolve(),queuedInputBytes:0};const previousActive=activeRef.current;if(edge&&previousActive)setLayout(tree=>placeSession(tree,previousActive,id,edge));else tabState.add(id);updateSessions([...sessionsRef.current,session]);setActive(id);
+  const number=++localSequence.current;const id=crypto.randomUUID();const session:Session={id,kind:'local',nativeMode:native?.program.mode,nativeLaunch:native,host:{id,name:'로컬 셸',host:'이 Mac',username:'local',port:0},localCwd:cwd,localShell:shell,terminal,fit,status:'connecting',closed:false,inputQueue:Promise.resolve(),queuedInputBytes:0};const previousActive=activeRef.current;if(edge&&previousActive)setLayout(tree=>placeSession(tree,previousActive,id,edge));else tabState.add(id);updateSessions([...sessionsRef.current,session]);setActive(id);
   const output=new Channel<{type:'data';bytes:number[]}|{type:'closed';message:string;retryable?:boolean}>();output.onmessage=e=>{if(session.closed)return;if(e.type==='data'){receiveOutput(session,new Uint8Array(e.bytes));terminal.write(new Uint8Array(e.bytes),()=>void invoke('ack_output',{id}).catch(()=>{}));}else{session.status='closed';terminal.writeln('\r\n['+e.message+']');refresh();}};
-  try{const info=await invoke<{shell:string;cwd:string;pid:number}>('start_local',{id,request:{cwd:cwd||null,shell:shell||null},output});session.localCwd=info.cwd;session.localShell=info.shell;session.host.name=(info.shell.split('/').at(-1)||'로컬 셸')+' · '+number;if(session.closed){void invoke('disconnect_ssh',{id}).catch(()=>{});return;}if(session.status!=='closed')session.status='connected';refresh();}catch(e){if(!session.closed){session.status='closed';setError(String(e));terminal.writeln('\r\n'+String(e));refresh();}}finally{localStarting.current=false;}return session;
+  try{const info=native?.serial?await invoke<{path:string;baud:number}>('start_serial',{id,request:native.serial,output}).then(s=>({shell:`SERIAL ${s.path}`,cwd:'',pid:0})):await invoke<{shell:string;cwd:string;pid:number}>('start_local',{id,request:{cwd:cwd||null,shell:shell||null,program:native?.program},output});session.localCwd=info.cwd;session.localShell=info.shell;session.host.name=(info.shell.split('/').at(-1)||'로컬 셸')+' · '+number;if(session.closed){void invoke('disconnect_ssh',{id}).catch(()=>{});return;}if(session.status!=='closed')session.status='connected';refresh();}catch(e){if(!session.closed){session.status='closed';setError(String(e));terminal.writeln('\r\n'+String(e));refresh();}if(native)throw e;}finally{localStarting.current=false;}return session;
  };
  // Each launch starts one fresh local shell; previous tabs are not persisted.
  useEffect(()=>{if(desktop)void openLocal();},[]);
@@ -110,6 +113,7 @@ function App(){
   try{routeRun.current=new SshRouteRun(connectionRoute(host,[...dataRef.current.hosts,...sessionsRef.current.filter(s=>s.kind!=='local').map(s=>s.host)]),secret);advanceRoute.current();}catch(e){abortRoute();setError(String(e));}
  };
  const reconnect=(session:Session)=>{
+  if(session.kind==='local'){void openLocal(session.localCwd,session.nativeLaunch?'':session.localShell,undefined,session.nativeLaunch).catch(e=>setError(String(e)));return;}
   if(routeRun.current||connecting.current||session.status!=='closed'||session.closed)return;
   if(!unlocked){navigate('all');setNotice('저장된 항목을 연 뒤 SSH 세션에서 다시 연결하세요.');return;}
   const host=dataRef.current.hosts.find(h=>h.id===session.host.id)||session.host;
@@ -217,12 +221,13 @@ function App(){
  useEffect(()=>{if(mode==='files'&&current?.status!=='connected')setMode('terminal');},[mode,current?.status]);
  const title=section==='idle'?'터미널':section==='favorites'?'즐겨찾기':section==='snippets'?'저장 명령':section.startsWith('group:')?section.slice(6):'모든 호스트';
  const quickActions:QuickAction[]=[
+  {id:'native-connection',title:'RDP · 시리얼 · 고급 SSH · 스크립트 · SCP/FTP',detail:'연결·실행 및 인증 프로필',group:'NEW',run:()=>setNativeOpen(true)},
   ...(unlocked?[{id:'workspace-transfer',title:'호스트·저장 명령 가져오기 / 내보내기',detail:'비밀번호 제외 · JSON',group:'TOOLS',run:()=>setTransferOpen(true)}]:[]),
   ...(['compose','search','logs','triggers','display','tunnels','automation'] as const).map(page=>({id:'tool-'+page,title:({compose:'작성·다중 전송',search:'터미널 검색',logs:'세션 기록·Hex 보기',triggers:'출력 트리거',display:'터미널 화면 설정',tunnels:'SSH 로컬 터널',automation:'자동화 시나리오·입력 기록·키 매핑'})[page],detail:'터미널 도구',group:'TOOLS',run:()=>setToolPage(page)})),
   ...sessions.map(s=>({id:s.id,title:s.host.name||s.host.host,detail:s.kind==='local'?s.localCwd||'이 Mac':s.host.username+'@'+s.host.host,group:s.kind==='local'?'LOCAL':'SSH',run:()=>activate(s.id)})),
   {id:'new-local',title:'새 로컬 터미널',detail:'폴더와 셸 선택 · ⌘ N',group:'NEW',run:()=>setNewSession(true)},
   ...(current?.kind==='ssh'&&current.status==='connected'&&unlocked?[{id:'internal-host',title:'내부 호스트 연결',detail:(current.host.name||current.host.host)+' 경유',group:'SSH',run:()=>editHost(undefined,current)}]:[]),
-  ...(current?.status==='closed'?[{id:'reconnect',title:current.kind==='local'?'로컬 셸 다시 열기':'SSH 다시 연결',detail:current.host.name||current.host.host,group:current.kind==='local'?'LOCAL':'SSH',run:()=>{if(current.kind==='local')void openLocal(current.localCwd,current.localShell);else openHost(current.host);}}]:[]),
+  ...(current?.status==='closed'?[{id:'reconnect',title:current.nativeMode?'연결·실행 다시 열기':current.kind==='local'?'로컬 셸 다시 열기':'SSH 다시 연결',detail:current.host.name||current.host.host,group:current.kind==='local'?'LOCAL':'SSH',run:()=>reconnect(current)}]:[]),
   {id:'hosts',title:'저장된 호스트 열기',detail:unlocked?'저장된 서버 찾아보기':'호스트와 저장 명령 잠금 해제',group:'SSH',run:()=>navigate('all')},
   {id:'appearance',title:'테마 변경',detail:'Arctic 스페셜 · 8가지 컬러 프리셋',group:'THEME',run:()=>setAppearanceOpen(true)},
   ...hosts.map(h=>({id:'host-'+h.id,title:h.name||h.host,detail:h.username+'@'+h.host+' '+(h.group||''),group:'HOST',run:()=>openHost(h)}))
@@ -236,7 +241,7 @@ function App(){
    <div className="nav-label group-label">그룹<span>{groups.length}</span></div><nav className="group-nav" aria-label="호스트 그룹">{groups.map(g=><button key={g} className={section===`group:${g}`&&!active?'selected':''} onClick={()=>navigate(`group:${g}`)}><Folder size={17}/><span className="group-name">{g}</span><small>{hosts.filter(h=>h.group===g).length}</small></button>)}{!groups.length&&<p className="sidebar-hint">호스트에 그룹을 지정하면<br/>여기에 모아 볼 수 있어요.</p>}</nav>
    </div><div className="sidebar-bottom"><button className="appearance-trigger" onClick={()=>setAppearanceOpen(true)}>{presetFor(appearance.resolved).mode==='dark'?<Moon size={15}/>:<Sun size={15}/>}<span>테마</span><small>{appearance.preference==='system'?'시스템':presetFor(appearance.resolved).name}</small><ChevronRight size={13}/></button><div className="vault-indicator"><span className={`status-dot ${unlocked?'online':''}`}/><strong>{unlocked?'저장된 항목 열림':'저장된 항목 잠김'}</strong><ShieldCheck size={16}/></div><p>{desktop?'호스트와 저장 명령을 함께 보호합니다.':'브라우저 미리보기 · 메모리 저장'}</p><button className="vault-action" disabled={vaultBusy} onClick={()=>unlocked?(desktop?setConfirm('lock'):setNotice('브라우저 미리보기에서는 Keychain을 사용하지 않습니다.')):void unlock()}><LockKeyhole size={14}/>{vaultBusy?'처리 중…':unlocked?'저장된 항목 잠그기':'저장된 항목 열기'}<ChevronRight size={14}/></button></div>
   </aside>
-  <main><header className="topbar"><div className="breadcrumbs"><button className="icon-button" title="탐색 패널 · ⌘ B" aria-expanded={sidebar} aria-label={sidebar?'탐색 패널 접기':'탐색 패널 펼치기'} onClick={toggleSidebar}>{sidebar?<PanelLeftClose size={18}/>:<PanelLeftOpen size={18}/>}</button><span>{current?.kind==='local'?'이 Mac':'워크스페이스'}</span><ChevronRight size={13}/><strong>{active?current?.host.name||current?.host.host:title}</strong></div><button className="topbar-search" onClick={()=>setQuickSwitch(true)}><Search size={14}/>빠른 전환<kbd>⌘ K</kbd></button><button className="topbar-search" onClick={()=>setToolPage('compose')}>터미널 도구</button><div className="connection-count"><span className={`status-dot ${live?'online':''}`}/>로컬 {localCount} · SSH {live}</div></header>
+  <main><header className="topbar"><div className="breadcrumbs"><button className="icon-button" title="탐색 패널 · ⌘ B" aria-expanded={sidebar} aria-label={sidebar?'탐색 패널 접기':'탐색 패널 펼치기'} onClick={toggleSidebar}>{sidebar?<PanelLeftClose size={18}/>:<PanelLeftOpen size={18}/>}</button><span>{current?.kind==='local'?'이 Mac':'워크스페이스'}</span><ChevronRight size={13}/><strong>{active?current?.host.name||current?.host.host:title}</strong></div><button className="topbar-search" onClick={()=>setQuickSwitch(true)}><Search size={14}/>빠른 전환<kbd>⌘ K</kbd></button><button className="topbar-search" onClick={()=>setNativeOpen(true)}>연결·실행</button><button className="topbar-search" onClick={()=>setToolPage('compose')}>터미널 도구</button><div className="connection-count"><span className={`status-dot ${live?'online':''}`}/>로컬 {localCount} · SSH {live}</div></header>
    {sessions.length>0&&<SessionTabs drag={tabDrag.drag} sessions={tabSessions} active={active} sidebarOpen={sidebar} filesOpen={mode==='files'} onFiles={()=>{if(!active)return;if(mode==='files')setMode('terminal');else{setFileSessions(ids=>ids.includes(active)?ids:[...ids,active]);setMode('files');}}} onLayout={()=>setLayoutOpen(value=>!value)} layoutOpen={layoutOpen} onTabPointerDown={(id,e)=>{setLayoutOpen(false);tabDrag.start(id,e);}} ignoreTabClick={tabDrag.ignoreClick} onSelect={activate} onClose={closeTab} onSidebar={toggleSidebar} onNew={()=>void openLocal()} onSearch={()=>setQuickSwitch(true)}/>}
    {layoutOpen&&active&&<PaneLayoutMenu count={paneIds(effectiveTree).length} canAdd={sessions.length<16} onAdd={edge=>void openLocal(localCwd,localShell,edge)} onChoose={chooseLayout} onClose={()=>setLayoutOpen(false)}/>}
    <section className={`workspace ${active&&mode==='terminal'?'terminal-workspace':''}`}>
@@ -254,6 +259,7 @@ function App(){
   <ToastStack error={error} notice={notice} onDismissError={()=>setError('')} onDismissNotice={()=>setNotice('')}/>
   {closingTab&&<Modal title="이 탭을 닫을까요?" eyebrow="CLOSE TAB" onClose={()=>setClosingTab(null)}><p>이 탭의 터미널 {closingTab.length}개와 연결된 하위 SSH 세션이 종료됩니다.</p><div className="modal-actions"><button className="secondary" onClick={()=>setClosingTab(null)}>취소</button><button className="primary" onClick={()=>{for(const id of closingTab){const s=sessionsRef.current.find(s=>s.id===id);if(s)close(s);}setClosingTab(null);}}>탭 닫기</button></div></Modal>}
   {appearanceOpen&&<AppearanceDialog value={appearance.preference} onChange={appearance.choose} onClose={()=>setAppearanceOpen(false)}/>}
+  {nativeOpen&&<NativeConnectionDialog workspace={data} unlocked={unlocked} onUpdate={update} onLaunch={value=>openLocal('','',undefined,value)} onClose={()=>setNativeOpen(false)}/>}
   {transferOpen&&unlocked&&<WorkspaceTransfer workspace={data} onImport={update} onClose={()=>setTransferOpen(false)}/>}
   {toolPage&&<TerminalTools onSessionChange={refresh} sessions={sessions} current={current} page={toolPage} onPage={setToolPage} onClose={()=>setToolPage(null)} onError={setError}/>}
   {quickSwitch&&<QuickSwitch actions={quickActions} onClose={()=>setQuickSwitch(false)}/>}

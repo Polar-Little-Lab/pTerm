@@ -2,6 +2,9 @@
 mod files;
 mod tunnels;
 mod socks;
+mod remote_forward;
+mod serial;
+mod programs;
 mod text_export;
 mod local;
 mod ssh;
@@ -27,6 +30,7 @@ enum Input {
 }
 #[derive(Clone)]
 struct SessionControl {
+    remote_routes: remote_forward::Routes,
     input: mpsc::Sender<Input>,
     cancel: watch::Sender<bool>,
     transport: Option<Arc<russh::client::Handle<ssh::VerifiedClient>>>,
@@ -72,6 +76,7 @@ async fn connect_ssh(
         None => None,
     };
     let mut parent_cancelled = parent.as_ref().map(|p| p.cancel.subscribe());
+    let routes=remote_forward::Routes::default();
     let (tx, mut rx) = mpsc::channel(64);
     let (cancel, mut cancelled) = watch::channel(false);
     {
@@ -91,6 +96,7 @@ async fn connect_ssh(
         sessions.insert(
             id.clone(),
             SessionControl {
+                remote_routes: routes.clone(),
                 input: tx,
                 cancel,
                 transport: None,
@@ -98,7 +104,7 @@ async fn connect_ssh(
         );
     }
     let connection = tokio::select! {
-        result = ssh::connect(request, parent.as_ref().and_then(|p| p.transport.clone())) => result,
+        result = ssh::connect_with_routes(request, parent.as_ref().and_then(|p| p.transport.clone()),routes) => result,
         _ = parent_closed(&mut parent_cancelled) => Err(ssh::ConnectError::Invalid {message: "Bastion 연결이 종료되었습니다.".into()}),
         _ = cancelled.changed() => Err(ssh::ConnectError::Invalid { message: "연결이 취소되었습니다.".into() }),
     };
@@ -242,6 +248,9 @@ fn main() {
             tunnels::start_tunnel,
             tunnels::list_tunnels,
             tunnels::stop_tunnel,
+            programs::preview_program,
+            serial::list_serial_ports,
+            serial::start_serial,
             take_demo_request,
             connect_ssh,
             local::start_local,
