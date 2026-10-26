@@ -6,6 +6,7 @@ mod remote_forward;
 mod serial;
 mod programs;
 mod scripts;
+mod file_logs;
 mod text_export;
 mod local;
 mod ssh;
@@ -245,7 +246,9 @@ fn main() {
         .manage(files::Transfers::default())
         .manage(tunnels::Tunnels::default())
         .manage(scripts::Scripts::default())
-        .invoke_handler(tauri::generate_handler![scripts::start_script,scripts::script_response,scripts::stop_script,
+        .manage(file_logs::Logs::default())
+        .manage(file_logs::ExitReady::default())
+        .invoke_handler(tauri::generate_handler![file_logs::start_file_log,file_logs::append_file_log,file_logs::stop_file_log,file_logs::finish_log_shutdown,scripts::start_script,scripts::script_response,scripts::stop_script,
             text_export::save_text_file,
             tunnels::start_tunnel,
             tunnels::list_tunnels,
@@ -269,10 +272,11 @@ fn main() {
             files::transfer_file,
             files::cancel_transfer
         ])
+        .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();window.app_handle().exit(0);}})
         .build(tauri::generate_context!())
         .expect("Polar Terminal could not start")
         .run(|app, event| {
-            use tauri::Manager;
+            use tauri::{Manager,Emitter};
             static EXITING: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
@@ -280,6 +284,8 @@ fn main() {
                     return;
                 }
                 api.prevent_exit();
+                let logs=app.state::<file_logs::Logs>().inner().clone();
+                let _=app.emit("prepare-exit",());
                 let sessions = app.state::<Sessions>().inner().clone();
                 if let Ok(map) = sessions.0.lock() {
                     for session in map.values() {
@@ -289,11 +295,12 @@ fn main() {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     for _ in 0..150 {
-                        if sessions.0.lock().map(|map| map.is_empty()).unwrap_or(true) {
+                        if sessions.0.lock().map(|map| map.is_empty()).unwrap_or(true) && logs.is_empty() && app.state::<file_logs::ExitReady>().0.load(std::sync::atomic::Ordering::SeqCst) {
                             break;
                         }
                         tokio::time::sleep(Duration::from_millis(20)).await;
                     }
+                    let _=tokio::time::timeout(Duration::from_secs(3),tauri::async_runtime::spawn_blocking(move||logs.finish())).await;
                     app.exit(0);
                 });
             }

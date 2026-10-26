@@ -1,3 +1,4 @@
+import {writeFileLog} from './file-log';
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { save } from "@tauri-apps/plugin-dialog";
 import type { Session } from "./types";
@@ -50,6 +51,7 @@ export function captureFor(session: Session): Capture {
 export function receiveOutput(session: Session, bytes: Uint8Array) {
   const state = captureFor(session),
     text = state.decoder.decode(bytes, { stream: true });
+  writeFileLog(session,bytes,text);
   if (state.recording) {
     const chunk = {
       time: new Date().toISOString(),

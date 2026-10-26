@@ -74,3 +74,10 @@
 .native-connections .modal-actions { position:sticky;bottom:-28px;background:var(--surface);padding:16px 0;margin-bottom:-12px; }
 .native-connections [role=alert] { padding:12px;border:1px solid currentColor;border-radius:8px;overflow-wrap:anywhere; }
 .native-connections .form-row > label { min-width:0; }
+
+.preference-row{padding:12px 0;border-bottom:1px solid var(--line)}
+.preference-row small{margin-left:auto;color:var(--text-muted)}
+.preference-row .tools-row input{flex:1;min-width:0}
+.native-connections fieldset{border:1px solid var(--line);border-radius:10px;margin:18px 0;padding:12px}
+.tools-output code,.modal code{overflow-wrap:anywhere}
+.file-log-badge{font-size:9px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--text-muted)}.file-log-badge.has-error{color:#c45b50}

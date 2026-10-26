@@ -1,3 +1,5 @@
+import {FileLogControls} from './FileLogControls';
+import {toRtf} from './rtf';
 import { LogReplay } from "./LogReplay";
 import { AutomationTools } from "./AutomationTools";
 import { invoke, isTauri } from "@tauri-apps/api/core";
@@ -28,8 +30,10 @@ export function TerminalTools({
   onClose,
   onError,
   onSessionChange,
+  onPreferences,
 }: {
   onSessionChange?: () => void;
+  onPreferences?: () => void;
   sessions: Session[];
   current?: Session;
   page: ToolPage;
@@ -297,6 +301,8 @@ export function TerminalTools({
       )}
       {page === "logs" && capture && current && (
         <>
+          <FileLogControls key={current.id} session={current} onError={onError}/>
+          {onPreferences&&<button onClick={onPreferences}>연결 시 자동 기록 설정</button>}
           <p className="modal-description">
             기록을 켠 이후의 수신 데이터만 메모리에 보관합니다. 최대 1 MiB이며
             초과하면 오래된 기록부터 제거합니다.
@@ -346,6 +352,7 @@ export function TerminalTools({
             >
               재생용 JSON 저장
             </button>
+            <button onClick={()=>void exportText("pterm-session.rtf",toRtf(capture.chunks.map(c=>c.text).join("")),"application/rtf").catch(e=>onError(String(e)))}>RTF 저장</button>
             <button
               onClick={() => {
                 clearCapture(current);
@@ -435,6 +442,8 @@ export function TerminalTools({
       )}
       {page === "display" && current && (
         <>
+          {onPreferences&&<button onClick={onPreferences}>기본값·그룹·호스트 상속 설정</button>}
+          <p>아래 변경은 현재 세션에만 적용됩니다. 다음 연결에도 유지하려면 상속 설정에서 저장하세요.</p>
           <label className="check-inline">
             <input
               type="checkbox"

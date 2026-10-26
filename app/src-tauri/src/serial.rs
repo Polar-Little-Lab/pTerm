@@ -311,7 +311,19 @@ mod tests {
             unsafe { libc::tcgetattr(monitor.as_raw_fd(), &mut restored) },
             0
         );
-        assert_eq!(restored.c_lflag, original.c_lflag);
+        // Darwin marks pending input for reprocessing when ICANON is restored.
+        // PENDIN is kernel state, not a user configuration bit (XNU bsd/kern/tty.c).
+        assert_eq!(
+            restored.c_lflag & !libc::PENDIN,
+            original.c_lflag & !libc::PENDIN
+        );
+        assert_eq!(restored.c_cc, original.c_cc);
+        assert_eq!(unsafe { libc::cfgetispeed(&restored) }, unsafe {
+            libc::cfgetispeed(&original)
+        });
+        assert_eq!(unsafe { libc::cfgetospeed(&restored) }, unsafe {
+            libc::cfgetospeed(&original)
+        });
         assert_eq!(restored.c_iflag, original.c_iflag);
         assert_eq!(restored.c_oflag, original.c_oflag);
         assert_eq!(restored.c_cflag, original.c_cflag);

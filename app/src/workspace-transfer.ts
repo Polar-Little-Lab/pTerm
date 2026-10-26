@@ -1,3 +1,4 @@
+import {validPreferences,resolvePreferences} from "./session-preferences";
 import {
   validNativeData,
   portableNative,
@@ -35,6 +36,7 @@ export function portableWorkspace(workspace: Workspace): PortableWorkspace {
       authMethod: h.authMethod,
       keyPath: h.keyPath,
       bastionHostId: h.bastionHostId,
+      preferences: h.preferences||workspace.sessionDefaults||Object.keys(workspace.groupPreferences||{}).length?resolvePreferences(workspace,h):undefined,
     })),
     snippets: workspace.snippets.map((s) => ({
       id: s.id,
@@ -83,7 +85,8 @@ export function parsePortable(raw: string): PortableWorkspace {
       (h.authMethod !== undefined &&
         !["password", "key", "agent"].includes(h.authMethod)) ||
       (h.keyPath !== undefined && !text(h.keyPath, 4096)) ||
-      (h.bastionHostId !== undefined && !text(h.bastionHostId))
+      (h.bastionHostId !== undefined && !text(h.bastionHostId)) ||
+      (h.preferences !== undefined && !validPreferences(h.preferences))
     )
       throw new Error("호스트 형식이 잘못되었습니다.");
     ids.add(h.id);
