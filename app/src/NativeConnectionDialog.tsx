@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { open,save } from "@tauri-apps/plugin-dialog";
+import { open, save } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./components";
 import type { Workspace } from "./types";
 import {
@@ -92,7 +92,10 @@ export function NativeConnectionDialog({
   };
   async function choose(key: keyof ProgramRequest) {
     try {
-      const file = key==="localPath"&&!request.upload?await save({defaultPath:request.localPath}):await open({ multiple: false, directory: key === "cwd" });
+      const file =
+        key === "localPath" && !request.upload
+          ? await save({ defaultPath: request.localPath })
+          : await open({ multiple: false, directory: key === "cwd" });
       if (typeof file === "string") change(key, file);
     } catch (e) {
       setError(String(e));
@@ -197,12 +200,31 @@ export function NativeConnectionDialog({
               setName("");
               setProfileId("");
               setProfileName("");
-              setMode("ssh");setRequest({mode:"ssh",host:"",port:22,username:"",tls:true});setArgs("[]");
+              setMode("ssh");
+              setRequest({
+                mode: "ssh",
+                host: "",
+                port: 22,
+                username: "",
+                tls: true,
+              });
+              setArgs("[]");
             }
             if (p) {
               setMode(p.launch.program.mode);
-              setRequest(applyProfile(p.launch,workspace.profiles?.find(profile=>profile.id===p.profileId)).program);
-              setProfileName(workspace.profiles?.find(profile=>profile.id===p.profileId)?.name||"");
+              setRequest(
+                applyProfile(
+                  p.launch,
+                  workspace.profiles?.find(
+                    (profile) => profile.id === p.profileId,
+                  ),
+                ).program,
+              );
+              setProfileName(
+                workspace.profiles?.find(
+                  (profile) => profile.id === p.profileId,
+                )?.name || "",
+              );
               if (p.launch.serial) setSerial(p.launch.serial);
               setArgs(JSON.stringify(p.launch.program.args || []));
               setName(p.name);
@@ -225,7 +247,10 @@ export function NativeConnectionDialog({
           onChange={(e) => {
             const m = e.target.value;
             setMode(m);
-            if(!["ssh","scp"].includes(m)){setProfileId("");setEditingProfile(false);}
+            if (!["ssh", "scp"].includes(m)) {
+              setProfileId("");
+              setEditingProfile(false);
+            }
             setRequest((r) => ({
               ...r,
               mode: m,

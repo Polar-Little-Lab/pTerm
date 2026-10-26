@@ -26,6 +26,8 @@ macOS용 로컬·SSH 통합 터미널. Tauri 2, React/TypeScript, Rust, xterm.js
 
 앱을 다시 실행하면 새 로컬 터미널 하나로 시작합니다. 이전 세션·출력·탭 배치를 복원하지 않습니다. 호스트·저장 명령·테마 설정은 유지됩니다.
 
+개발 브랜치의 확장 기능은 [터미널 도구](docs/terminal-tools.md), [연결·실행과 Python/JavaScript 자동화](docs/native-connections.md), [Xshell 기능 대응 상태](docs/xshell-parity.md)를 참조하세요. 배포 버전의 기능 및 Xshell 전체 기능과 동일하다고 의미하지 않습니다.
+
 ## 개발 환경
 
 macOS, Xcode Command Line Tools, Node.js 24 이상, npm, Rust/Cargo 1.90 이상이 필요합니다. 현재 네이티브 구현은 macOS 전용입니다.
