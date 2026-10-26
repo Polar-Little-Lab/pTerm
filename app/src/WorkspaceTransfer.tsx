@@ -22,15 +22,15 @@ export function WorkspaceTransfer({
     [busy, setBusy] = useState(false);
   return (
     <Modal
-      title="호스트·저장 명령 이전"
+      title="연결·저장 명령 이전"
       eyebrow="IMPORT / EXPORT"
       onClose={onClose}
       busy={busy}
     >
       <p className="modal-description">
         비밀번호와 서버 지문은 내보내지 않습니다. 호스트 주소·사용자 이름·키
-        경로·저장 명령은 JSON 파일에 포함됩니다. 저장 명령에 직접 넣은 비밀 값은
-        먼저 제거하세요.
+        경로·저장 명령·인증 프로필·외부 실행 설정은 JSON 파일에 포함됩니다. 저장
+        명령에 직접 넣은 비밀 값은 먼저 제거하세요.
       </p>
       <button
         onClick={() =>
@@ -70,8 +70,10 @@ export function WorkspaceTransfer({
         <>
           <p>
             호스트 {preview.hosts.length}개 · 저장 명령{" "}
-            {preview.snippets.length}개를 새 항목으로 추가합니다. 기존 항목은
-            유지됩니다.
+            {preview.snippets.length}개 · 인증 프로필{" "}
+            {preview.profiles?.length || 0}개 · 연결{" "}
+            {preview.connections?.length || 0}개를 새 항목으로 추가합니다. 기존
+            항목은 유지됩니다.
           </p>
           <ul style={{ maxHeight: 160, overflow: "auto" }}>
             {preview.hosts.slice(0, 30).map((h) => (

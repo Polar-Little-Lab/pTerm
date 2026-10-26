@@ -16,6 +16,6 @@ test('local terminal creation has no Vault authentication dependency',()=>{
  let local;walk(source,n=>{if(ts.isVariableDeclaration(n)&&n.name.getText(source)==='openLocal')local=n.initializer;});assert.ok(local);
  const invoked=calls(local).filter(n=>n.expression.getText(source)==='invoke').map(n=>n.arguments[0]?.text);
  assert.ok(invoked.includes('start_local'));
- for(const command of invoked)assert.ok(['start_local','ack_output','disconnect_ssh'].includes(command),command);
+ for(const command of invoked)assert.ok(['start_local','start_serial','ack_output','disconnect_ssh'].includes(command),command);
  assert.ok(!calls(local).some(n=>n.expression.getText(source)==='unlock'));
 });

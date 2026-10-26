@@ -12,8 +12,9 @@ type Tunnel = {
   error?: string;
 };
 export function TunnelTools({ current }: { current?: Session }) {
-  const [mode,setMode]=useState('local');
-  const dynamic=mode==='dynamic',remote=mode==='remote';
+  const [mode, setMode] = useState("local");
+  const dynamic = mode === "dynamic",
+    remote = mode === "remote";
   const [tunnels, setTunnels] = useState<Tunnel[]>([]),
     [host, setHost] = useState("127.0.0.1"),
     [port, setPort] = useState("3306"),
@@ -44,7 +45,8 @@ export function TunnelTools({ current }: { current?: Session }) {
     try {
       await invoke("start_tunnel", {
         sessionId: current!.id,
-        dynamic,remote,
+        dynamic,
+        remote,
         host,
         port: Number(port),
         localPort: Number(local),
@@ -58,13 +60,18 @@ export function TunnelTools({ current }: { current?: Session }) {
   return (
     <>
       <p className="modal-description">
-        로컬 포워딩은 이 Mac에서 원격 서비스로, 원격 포워딩은 서버에서 이 Mac의 서비스로 연결합니다. 리슨 주소는 127.0.0.1이며 SSH 종료 시 함께 중지됩니다.
+        로컬 포워딩은 이 Mac에서 원격 서비스로, 원격 포워딩은 서버에서 이 Mac의
+        서비스로 연결합니다. 리슨 주소는 127.0.0.1이며 SSH 종료 시 함께
+        중지됩니다.
       </p>
       <label>
         방식
         <select
           value={mode}
-          onChange={(e) => {setMode(e.target.value);if(e.target.value==='remote'&&local==='0')setLocal('8080');}}
+          onChange={(e) => {
+            setMode(e.target.value);
+            if (e.target.value === "remote" && local === "0") setLocal("8080");
+          }}
         >
           <option value="local">로컬 포트 포워딩</option>
           <option value="remote">원격 포트 포워딩</option>
@@ -74,12 +81,12 @@ export function TunnelTools({ current }: { current?: Session }) {
       {!dynamic && (
         <>
           <label>
-            {remote?'이 Mac에서 접근할 서비스 주소':'원격 서비스 주소'}
+            {remote ? "이 Mac에서 접근할 서비스 주소" : "원격 서비스 주소"}
             <input value={host} onChange={(e) => setHost(e.target.value)} />
           </label>
           <div className="form-row">
             <label>
-              {remote?'대상 서비스 포트':'원격 포트'}
+              {remote ? "대상 서비스 포트" : "원격 포트"}
               <input
                 type="number"
                 min={1}
@@ -89,7 +96,7 @@ export function TunnelTools({ current }: { current?: Session }) {
               />
             </label>
             <label>
-              {remote?'서버 리슨 포트 · 1–65535':'로컬 포트 · 0은 자동'}
+              {remote ? "서버 리슨 포트 · 1–65535" : "로컬 포트 · 0은 자동"}
               <input
                 type="number"
                 min={0}
@@ -125,7 +132,8 @@ export function TunnelTools({ current }: { current?: Session }) {
           Number(port) < 1 ||
           Number(port) > 65535 ||
           !/^\d+$/.test(local) ||
-          Number(local) > 65535 || (remote&&Number(local)<1)
+          Number(local) > 65535 ||
+          (remote && Number(local) < 1)
         }
         onClick={() => void start()}
       >
@@ -135,7 +143,7 @@ export function TunnelTools({ current }: { current?: Session }) {
       {tunnels.map((t) => (
         <div key={t.id}>
           <p>
-            {t.remote?'서버':'이 Mac'} 127.0.0.1:{t.localPort} →{" "}
+            {t.remote ? "서버" : "이 Mac"} 127.0.0.1:{t.localPort} →{" "}
             {t.dynamic ? "SOCKS5" : `${t.host}:${t.port}`}
           </p>
           {t.error && <p role="alert">{t.error}</p>}

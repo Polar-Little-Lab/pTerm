@@ -1,9 +1,17 @@
+import {
+  validNativeData,
+  portableNative,
+  type AuthProfile,
+  type ConnectionPreset,
+} from "./native-connections";
 import type { Host, Snippet, Workspace } from "./types";
 export type PortableWorkspace = {
   format: "pterm-connections";
   version: 1;
   hosts: Host[];
   snippets: Snippet[];
+  profiles?: AuthProfile[];
+  connections?: ConnectionPreset[];
 };
 function text(value: unknown, max = 1024): value is string {
   return (
@@ -12,6 +20,7 @@ function text(value: unknown, max = 1024): value is string {
 }
 export function portableWorkspace(workspace: Workspace): PortableWorkspace {
   return {
+    ...portableNative(workspace),
     format: "pterm-connections",
     version: 1,
     hosts: workspace.hosts.map((h) => ({
@@ -45,7 +54,8 @@ export function parsePortable(raw: string): PortableWorkspace {
     !Array.isArray(v.hosts) ||
     !Array.isArray(v.snippets) ||
     v.hosts.length > 5000 ||
-    v.snippets.length > 5000
+    v.snippets.length > 5000 ||
+    !validNativeData(v)
   )
     throw new Error("지원하는 pTerm 내보내기 파일이 아닙니다.");
   const ids = new Set<string>();
@@ -103,6 +113,7 @@ export function parsePortable(raw: string): PortableWorkspace {
   // Whitelist fields: never import credentials or pre-trust server fingerprints.
   return portableWorkspace({
     version: 1,
+    ...portableNative(v),
     hosts: v.hosts,
     snippets: v.snippets,
   });
@@ -113,8 +124,26 @@ export function mergePortable(
   newId = () => crypto.randomUUID(),
 ): Workspace {
   const ids = new Map(incoming.hosts.map((h) => [h.id, newId()]));
+  const profileIds = new Map(
+    (incoming.profiles || []).map((p) => [p.id, newId()]),
+  );
   return {
     ...workspace,
+    profiles: [
+      ...(workspace.profiles || []),
+      ...(incoming.profiles || []).map((p) => ({
+        ...p,
+        id: profileIds.get(p.id)!,
+      })),
+    ],
+    connections: [
+      ...(workspace.connections || []),
+      ...(incoming.connections || []).map((p) => ({
+        ...p,
+        id: newId(),
+        profileId: p.profileId ? profileIds.get(p.profileId) : undefined,
+      })),
+    ],
     hosts: [
       ...workspace.hosts,
       ...incoming.hosts.map((h) => ({
