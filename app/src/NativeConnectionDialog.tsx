@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
+import { open,save } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./components";
 import type { Workspace } from "./types";
 import {
@@ -53,6 +53,7 @@ export function NativeConnectionDialog({
     [ports, setPorts] = useState<string[]>([]),
     [profileId, setProfileId] = useState(""),
     [name, setName] = useState(""),
+    [profileName, setProfileName] = useState(""),
     [args, setArgs] = useState("[]"),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
@@ -91,7 +92,7 @@ export function NativeConnectionDialog({
   };
   async function choose(key: keyof ProgramRequest) {
     try {
-      const file = await open({ multiple: false, directory: key === "cwd" });
+      const file = key==="localPath"&&!request.upload?await save({defaultPath:request.localPath}):await open({ multiple: false, directory: key === "cwd" });
       if (typeof file === "string") change(key, file);
     } catch (e) {
       setError(String(e));
@@ -147,10 +148,10 @@ export function NativeConnectionDialog({
     script = ["python", "javascript", "jxa"].includes(mode),
     transfer = ["scp", "ftp"].includes(mode);
   async function saveProfile() {
-    if (!name.trim()) return;
+    if (!profileName.trim()) return;
     const p: AuthProfile = {
       id: profileId || crypto.randomUUID(),
-      name: name.trim(),
+      name: profileName.trim(),
       username: request.username || "",
       identity: request.identity || "",
       certificate: request.certificate || "",
@@ -175,6 +176,7 @@ export function NativeConnectionDialog({
   }
   return (
     <Modal
+      className="native-connections"
       title="연결·실행"
       eyebrow="NATIVE CONNECTIONS"
       busy={busy}
@@ -194,10 +196,13 @@ export function NativeConnectionDialog({
             if (!p) {
               setName("");
               setProfileId("");
+              setProfileName("");
+              setMode("ssh");setRequest({mode:"ssh",host:"",port:22,username:"",tls:true});setArgs("[]");
             }
             if (p) {
               setMode(p.launch.program.mode);
-              setRequest(p.launch.program);
+              setRequest(applyProfile(p.launch,workspace.profiles?.find(profile=>profile.id===p.profileId)).program);
+              setProfileName(workspace.profiles?.find(profile=>profile.id===p.profileId)?.name||"");
               if (p.launch.serial) setSerial(p.launch.serial);
               setArgs(JSON.stringify(p.launch.program.args || []));
               setName(p.name);
@@ -220,6 +225,7 @@ export function NativeConnectionDialog({
           onChange={(e) => {
             const m = e.target.value;
             setMode(m);
+            if(!["ssh","scp"].includes(m)){setProfileId("");setEditingProfile(false);}
             setRequest((r) => ({
               ...r,
               mode: m,
@@ -368,6 +374,7 @@ export function NativeConnectionDialog({
                     const p = workspace.profiles?.find(
                       (p) => p.id === e.target.value,
                     );
+                    if (p) setProfileName(p.name);
                     if (p)
                       setRequest((r) => ({
                         ...r,
@@ -502,8 +509,18 @@ export function NativeConnectionDialog({
           </details>
         </>
       )}
+      {mode === "ssh" && (
+        <label>
+          인증 프로필 이름
+          <input
+            value={profileName}
+            onChange={(e) => setProfileName(e.target.value)}
+            placeholder="예: 운영 서버 인증"
+          />
+        </label>
+      )}
       <label>
-        저장할 이름
+        연결 이름
         <input value={name} onChange={(e) => setName(e.target.value)} />
       </label>
       <div className="tools-row">
@@ -541,8 +558,8 @@ export function NativeConnectionDialog({
         </button>
         {mode === "ssh" && (
           <button
-            disabled={!unlocked || !name.trim() || busy}
-            onClick={() => void saveProfile()}
+            disabled={!unlocked || !profileName.trim() || busy}
+            onClick={() => void saveProfile().catch((e) => setError(String(e)))}
           >
             인증 프로필 저장
           </button>
@@ -551,13 +568,37 @@ export function NativeConnectionDialog({
           <button
             onClick={() => {
               setEditingProfile(true);
-              setName(
+              setProfileName(
                 workspace.profiles?.find((p) => p.id === profileId)?.name || "",
               );
               setPreview(null);
             }}
           >
             프로필 설정 수정
+          </button>
+        )}
+        {profileId && (
+          <button
+            disabled={
+              busy ||
+              !unlocked ||
+              workspace.connections?.some((c) => c.profileId === profileId)
+            }
+            title="사용 중인 프로필은 연결에서 직접 설정으로 바꾼 뒤 삭제할 수 있습니다."
+            onClick={async () => {
+              if (
+                await onUpdate((w) => ({
+                  ...w,
+                  profiles: w.profiles?.filter((p) => p.id !== profileId),
+                }))
+              ) {
+                setProfileId("");
+                setEditingProfile(false);
+                setPreview(null);
+              }
+            }}
+          >
+            미사용 프로필 삭제
           </button>
         )}
         {presetId && (

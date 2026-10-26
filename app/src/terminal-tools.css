@@ -62,3 +62,15 @@
 .modal:has(.tools-nav) input[type="checkbox"] {
   width: auto;
 }
+
+.modal.native-connections { width: min(640px, calc(100vw - 32px)); }
+.native-connections > label, .native-connections details > label { display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:12px; }
+.native-connections .tools-row { margin:0;gap:8px; }
+.native-connections > .tools-row { margin:16px 0; }
+.native-connections details { padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin:16px 0; }
+.native-connections summary { cursor:pointer;font-weight:600; }
+.native-connections .check-inline { display:flex;flex-direction:row;align-items:center;gap:8px;margin:12px 0; }
+.native-connections input[type=checkbox] { width:16px;height:16px;flex:none; }
+.native-connections .modal-actions { position:sticky;bottom:-28px;background:var(--surface);padding:16px 0;margin-bottom:-12px; }
+.native-connections [role=alert] { padding:12px;border:1px solid currentColor;border-radius:8px;overflow-wrap:anywhere; }
+.native-connections .form-row > label { min-width:0; }

@@ -19,7 +19,7 @@ fn open(request:&SerialRequest)->Result<SerialPort,String>{
  if unsafe{libc::tcgetattr(fd,&mut original)}!=0{return Err(std::io::Error::last_os_error().to_string());}
  if unsafe{libc::ioctl(fd,libc::TIOCEXCL as libc::c_ulong)}!=0{return Err(std::io::Error::last_os_error().to_string());}let port=SerialPort{file,original};
  let mut settings=original;unsafe{libc::cfmakeraw(&mut settings);if libc::cfsetspeed(&mut settings,request.baud as libc::speed_t)!=0{return Err(std::io::Error::last_os_error().to_string());}}
- settings.c_cflag|=libc::CLOCAL|libc::CREAD;settings.c_cflag&=!(libc::CSIZE|libc::PARENB|libc::PARODD|libc::CSTOPB|libc::CRTSCTS);settings.c_cflag|=if request.data_bits==7{libc::CS7}else{libc::CS8};
+ settings.c_iflag&=!(libc::IXON|libc::IXOFF|libc::IXANY|libc::INPCK);settings.c_cflag|=libc::CLOCAL|libc::CREAD;settings.c_cflag&=!(libc::CSIZE|libc::PARENB|libc::PARODD|libc::CSTOPB|libc::CRTSCTS);settings.c_cflag|=if request.data_bits==7{libc::CS7}else{libc::CS8};
  if request.parity!="none"{settings.c_cflag|=libc::PARENB;settings.c_iflag|=libc::INPCK;}if request.parity=="odd"{settings.c_cflag|=libc::PARODD;}if request.stop_bits==2{settings.c_cflag|=libc::CSTOPB;}if request.flow=="hardware"{settings.c_cflag|=libc::CRTSCTS;}if request.flow=="software"{settings.c_iflag|=libc::IXON|libc::IXOFF;}
  if unsafe{libc::tcsetattr(fd,libc::TCSANOW,&settings)}!=0{return Err(std::io::Error::last_os_error().to_string());}Ok(port)
 }
