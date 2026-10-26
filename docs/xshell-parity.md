@@ -56,3 +56,6 @@
 - SFTP 양쪽 파일 이름 필터.
 
 검증: 로컬 포워딩까지의 커밋 9e7fff5에 대해 GitHub macOS CI의 프런트엔드 빌드/테스트 및 Rust 테스트가 통과했다. 이후 SOCKS5·자동화 변경은 추가 CI 대상이다. 실제 GUI와 실서버의 종합 검증 완료를 의미하지 않는다.
+
+
+검증 갱신: 0ebfcf3의 GitHub macOS CI도 성공했다. SOCKS5 협상 단위 테스트를 포함해 Rust 컴파일/테스트 및 프런트엔드 검증이 통과했다. 사용자 가이드는 `docs/terminal-tools.md`를 참조한다. RDP 등 미구현 항목은 그대로 남아 있다.
