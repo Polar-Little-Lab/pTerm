@@ -44,4 +44,15 @@
 - 시스템 저장 대화상자와 파일 쓰기를 통한 텍스트 내보내기.
 - macOS CI 작업 추가. 실행 성공 여부와 수동 UI 검증은 별도 확인해야 한다.
 
-미구현: 원격/동적 포워딩, RDP, SERIAL, TELNET/RLOGIN, X/Y/ZMODEM, FTP/SCP, PKCS#11/Kerberos/CA 인증 UI, 인증 프로필, 스크립트 실행/기록, 자동 명령 트리거, 속성 상속, 세션 그룹/탭 잠금, 인코딩·키 매핑·강조 규칙, 로그 재생/RTF/자동 파일 기록 등. 전체 기능 완료가 아니다.
+미구현: 원격 포워딩, RDP, SERIAL, TELNET/RLOGIN, X/Y/ZMODEM, FTP/SCP, PKCS#11/Kerberos/CA 인증 UI, 인증 프로필, Python/VBScript/JScript 실행, 자동 명령 트리거, 속성 상속, 세션 그룹, 인코딩·강조 규칙, RTF/자동 파일 기록 등. 전체 기능 완료가 아니다.
+
+
+추가 구현:
+- JSON 시나리오(send/wait/expect) 실행·취소, 출력 대기 시간 초과, 입력 실패 시 중단. Python/VBScript/JScript 호환 기능이 아니다.
+- 입력 기록을 JSON 시나리오로 변환. 세션 메모리에만 보관하며 기록 여부를 명시한다.
+- 세션별 Ctrl+Option+문자 키 매핑, 닫기 보호.
+- SOCKS5 CONNECT 동적 포워딩. 로컬 루프백, IPv4/IPv6/도메인 주소. SOCKS4와 UDP는 미구현.
+- pTerm JSON 로그의 읽기 전용 순서 재생. 원본 시간 간격 재현은 미구현.
+- SFTP 양쪽 파일 이름 필터.
+
+검증: 로컬 포워딩까지의 커밋 9e7fff5에 대해 GitHub macOS CI의 프런트엔드 빌드/테스트 및 Rust 테스트가 통과했다. 이후 SOCKS5·자동화 변경은 추가 CI 대상이다. 실제 GUI와 실서버의 종합 검증 완료를 의미하지 않는다.

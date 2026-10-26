@@ -1,3 +1,4 @@
+import {captureFor,recordInput} from './terminal-tools';
 import './inline-suggestions.css';
 import {createPortal} from 'react-dom';
 import {Modal} from './components';
@@ -32,21 +33,26 @@ export function TerminalPane({ onReconnect,session, active, slot, onError, snipp
       if(!text||!/[\r\n]/.test(text))return;
       event.preventDefault();event.stopImmediatePropagation();
       if(session.closed||session.status!=='connected')return;
-      if(new TextEncoder().encode(text).length>1024*1024){onError('붙여넣기는 한 번에 1 MiB 이하로 입력하세요.');return;}
+      if(new TextEncoder().encode(text).length>1024*1024){session.inputFailures=(session.inputFailures||0)+1;onError('붙여넣기는 한 번에 1 MiB 이하로 입력하세요.');return;}
       setPasteDraft(text);
     };
     surface.addEventListener('paste',capturePaste,true);
+    session.terminal.attachCustomKeyEventHandler(event=>{
+      if(event.type==='keydown'&&event.ctrlKey&&event.altKey&&!event.metaKey&&!event.shiftKey&&!event.isComposing&&session.status==='connected'&&!session.closed){const text=captureFor(session).bindings[event.code];if(text!==undefined){event.preventDefault();session.terminal.paste(text);return false;}}
+      return true;
+    });
     const input = session.terminal.onData(data => {
       if (session.status !== 'connected') return;
+      recordInput(session,data);
       const bytes = new TextEncoder().encode(data);
-      if(session.queuedInputBytes + bytes.length>1024*1024) {onError('붙여넣기는 한 번에 1 MiB 이하로 입력하세요.');return;}
+      if(session.queuedInputBytes + bytes.length>1024*1024) {session.inputFailures=(session.inputFailures||0)+1;onError('붙여넣기는 한 번에 1 MiB 이하로 입력하세요.');return;}
       session.queuedInputBytes += bytes.length;
       session.inputQueue = session.inputQueue.then(async () => {
         for(let i=0; i<bytes.length; i+=16384) {
           if(session.closed) return;
           await invoke('send_input', {id: session.id, bytes: Array.from(bytes.slice(i,i+16384))});
         }
-      }).catch(e => onError(String(e))).finally(()=>{session.queuedInputBytes -= bytes.length;});
+      }).catch(e => {session.inputFailures=(session.inputFailures||0)+1;onError(String(e));}).finally(()=>{session.queuedInputBytes -= bytes.length;});
     });
     let timer: ReturnType<typeof setTimeout>;
     const resize = () => { clearTimeout(timer); timer = setTimeout(() => {

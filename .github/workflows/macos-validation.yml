@@ -17,6 +17,13 @@ jobs:
           cache: npm
           cache-dependency-path: app/package-lock.json
       - run: rustup toolchain install 1.90.0 --profile minimal
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: macos-rust-1.90-${{ hashFiles('app/src-tauri/Cargo.lock') }}
       - run: npm ci --prefix app
       - run: npm test --prefix app
       - run: npm run build --prefix app

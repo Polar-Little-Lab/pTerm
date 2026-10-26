@@ -4,4 +4,4 @@ export type Host = {id:string;name:string;host:string;port:number;username:strin
 export type Snippet = {id:string;name:string;command:string};
 export type SavedCredential = {hostId:string;scope:string;secret:string};
 export type Workspace = {version:1;hosts:Host[];snippets:Snippet[];credentials?:SavedCredential[]};
-export type Session = {id:string;kind?:'local'|'ssh';localCwd?:string;localShell?:string;host:Host;reconnecting?:boolean;bastionSessionId?:string;routeLabel?:string;terminal:Terminal;fit:FitAddon;status:'connecting'|'connected'|'closed';closed:boolean;inputQueue:Promise<unknown>;queuedInputBytes:number};
+export type Session = {closeProtected?:boolean;inputFailures?:number;id:string;kind?:'local'|'ssh';localCwd?:string;localShell?:string;host:Host;reconnecting?:boolean;bastionSessionId?:string;routeLabel?:string;terminal:Terminal;fit:FitAddon;status:'connecting'|'connected'|'closed';closed:boolean;inputQueue:Promise<unknown>;queuedInputBytes:number};
