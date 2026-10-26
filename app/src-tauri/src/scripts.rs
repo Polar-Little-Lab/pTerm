@@ -140,13 +140,54 @@ pub async fn start_script(
         let mut out_done = false;
         let mut err_done = false;
         let mut total = 0usize;
-        let result=async{loop{tokio::select!{
- _=cancelled.changed()=>return Err("스크립트를 중지했습니다.".to_string()),
- response=rx.recv()=>{if let Some(response)=response{stdin.write_all(response.as_bytes()).await.map_err(|e|e.to_string())?;stdin.write_all(b"\n").await.map_err(|e|e.to_string())?;}else{return Err("응답 채널 종료".into());}},
- n=stdout.read(&mut out),if !out_done=>{let n=n.map_err(|e|e.to_string())?;if n==0{out_done=true;if !pending.is_empty(){output.send(decode(&pending)?).map_err(|e|e.to_string())?;pending.clear();}}else{total+=n;if total>4*1024*1024{return Err("스크립트 출력 제한 4 MiB 초과".into());}pending.extend_from_slice(&out[..n]);while let Some(end)=pending.iter().position(|b|*b==b'\n'){let line:Vec<_>=pending.drain(..=end).collect();output.send(decode(&line)?).map_err(|e|e.to_string())?;}if pending.len()>65536{return Err("스크립트 출력 한 줄 제한 64 KiB 초과".into());}}},
- n=stderr.read(&mut err),if !err_done=>{let n=n.map_err(|e|e.to_string())?;if n==0{err_done=true;}else{total+=n;if total>4*1024*1024{return Err("스크립트 출력 제한 초과".into());}output.send(ScriptEvent::Log{text:String::from_utf8_lossy(&err[..n]).into_owned()}).map_err(|e|e.to_string())?;}},
- status=child.wait(),if out_done&&err_done=>{let status=status.map_err(|e|e.to_string())?;return if status.success(){Ok(())}else{Err(format!("스크립트 종료: {status}"))};}
- }}}.await;
+        let result = async {
+            loop {
+                tokio::select! {
+                    _ = cancelled.changed() => return Err("스크립트를 중지했습니다.".to_string()),
+                    response = rx.recv() => {
+                        let Some(response) = response else { return Err("응답 채널 종료".into()); };
+                        tokio::select! {
+                            _ = cancelled.changed() => return Err("스크립트를 중지했습니다.".into()),
+                            written = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+                                stdin.write_all(response.as_bytes()).await?;
+                                stdin.write_all(b"\n").await
+                            }) => { written.map_err(|_| "스크립트 응답 전송 시간 초과".to_string())?.map_err(|e| e.to_string())?; }
+                        }
+                    },
+                    n = stdout.read(&mut out), if !out_done => {
+                        let n = n.map_err(|e| e.to_string())?;
+                        if n == 0 {
+                            out_done = true;
+                            if !pending.is_empty() {
+                                output.send(decode(&pending)?).map_err(|e| e.to_string())?;
+                                pending.clear();
+                            }
+                        } else {
+                            total += n;
+                            if total > 4 * 1024 * 1024 { return Err("스크립트 출력 제한 4 MiB 초과".into()); }
+                            pending.extend_from_slice(&out[..n]);
+                            while let Some(end) = pending.iter().position(|b| *b == b'\n') {
+                                let line: Vec<_> = pending.drain(..=end).collect();
+                                output.send(decode(&line)?).map_err(|e| e.to_string())?;
+                            }
+                            if pending.len() > 65536 { return Err("스크립트 출력 한 줄 제한 64 KiB 초과".into()); }
+                        }
+                    },
+                    n = stderr.read(&mut err), if !err_done => {
+                        let n = n.map_err(|e| e.to_string())?;
+                        if n == 0 { err_done = true; } else {
+                            total += n;
+                            if total > 4 * 1024 * 1024 { return Err("스크립트 출력 제한 초과".into()); }
+                            output.send(ScriptEvent::Log { text: String::from_utf8_lossy(&err[..n]).into_owned() }).map_err(|e| e.to_string())?;
+                        }
+                    },
+                    status = child.wait(), if out_done && err_done => {
+                        let status = status.map_err(|e| e.to_string())?;
+                        return if status.success() { Ok(()) } else { Err(format!("스크립트 종료: {status}")) };
+                    }
+                }
+            }
+        }.await;
         let _ = child.kill().await;
         let _ = child.wait().await;
         if let Ok(mut map) = registry.0.lock() {

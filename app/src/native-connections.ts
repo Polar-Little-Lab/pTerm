@@ -101,8 +101,8 @@ export function validNativeData(value: {
   profiles?: AuthProfile[];
   connections?: ConnectionPreset[];
 }): boolean {
-  const profiles = value.profiles || [],
-    connections = value.connections || [];
+  const profiles = value.profiles === undefined ? [] : value.profiles,
+    connections = value.connections === undefined ? [] : value.connections;
   if (
     !Array.isArray(profiles) ||
     profiles.length > 1000 ||

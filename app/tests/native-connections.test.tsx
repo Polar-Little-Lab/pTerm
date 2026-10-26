@@ -42,6 +42,10 @@ test("profiles apply current settings without mutating saved connection", () => 
 test("native import validates references, bounds, flags and serial settings", () => {
   const data = { profiles: [profile], connections: [connection] };
   assert.ok(validNativeData(data));
+  for(const bad of [null,false,0,{}]) {
+    assert.equal(validNativeData({...data,profiles:bad} as any),false);
+    assert.equal(validNativeData({...data,connections:bad} as any),false);
+  }
   assert.ok(!validNativeData({ ...data, profiles: [] }));
   assert.ok(
     !validNativeData({ ...data, connections: [connection, connection] }),
