@@ -72,6 +72,12 @@ export class FileLog {
       void this.pump();
       return;
     }
+    // Tiny packets also consume array/object memory and queue processing time.
+    if (this.pending.length >= 4096) {
+      this.fail("로그 쓰기 대기열 4096개를 초과해 기록을 중지했습니다.");
+      void this.pump();
+      return;
+    }
     this.pending.push(bytes.slice());
     this.queued += bytes.length;
     if (!this.timer)

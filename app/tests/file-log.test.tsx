@@ -130,3 +130,52 @@ test("repeated shutdown while native close is pending closes exactly once", asyn
   await Promise.all([one, two]);
   assert.equal(log.status, "stopped");
 });
+test("tiny packet backlog is bounded while disk write is blocked and closes once", async () => {
+  let release!: (value: typeof info) => void;
+  let entered!: () => void;
+  const writing = new Promise<void>((r) => (entered = r));
+  let writes = 0;
+  let closes = 0;
+  const errors: string[] = [];
+  const io: LogIO = {
+    start: async () => info,
+    append: () => {
+      writes++;
+      entered();
+      return new Promise((r) => (release = r));
+    },
+    stop: async () => { closes++; },
+  };
+  const log = new FileLog("id", options, io, (error) => errors.push(error));
+  log.write(new Uint8Array([42]));
+  await writing;
+  for (let i = 0; i < 4096; i++) log.write(new Uint8Array([i % 256]));
+  assert.equal(log.status, "recording");
+  log.write(new Uint8Array([1]));
+  log.write(new Uint8Array([2]));
+  assert.equal(log.status, "error");
+  assert.match(log.error, /4096/);
+  assert.equal(errors.length, 1);
+  const stopped = log.stop();
+  release(info);
+  await stopped;
+  assert.equal(writes, 1);
+  assert.equal(closes, 1);
+});
+test("4096 tiny queued chunks still flush in order at the supported limit", async () => {
+  let ready!: (value: typeof info) => void;
+  const recorded: number[] = [];
+  const io: LogIO = {
+    start: () => new Promise((r) => (ready = r)),
+    append: async (_, bytes) => { recorded.push(...bytes); return info; },
+    stop: async () => {},
+  };
+  const log = new FileLog("id", options, io);
+  const expected = Array.from({ length: 4096 }, (_, i) => i % 256);
+  for (const byte of expected) log.write(new Uint8Array([byte]));
+  const stopped = log.stop();
+  ready(info);
+  await stopped;
+  assert.equal(log.status, "stopped");
+  assert.deepEqual(recorded, expected);
+});
