@@ -1,8 +1,8 @@
-# pTerm 1.0.0
+# pTerm 1.1.0 · 출시 준비
 
 macOS용 로컬·SSH 통합 터미널. Tauri 2, React/TypeScript, Rust, xterm.js로 구현했습니다.
 
-**pTerm의 첫 정식 릴리스입니다.** 기존 Polarsh의 기능을 이어받아 별도 저장소와 버전 체계로 시작합니다. [이름 변경과 호환성](docs/pterm-rename.md)
+**소스는 1.1.0 출시 준비 중이며, 현재 다운로드 가능한 정식 버전은 1.0.0입니다.** 기존 Polarsh의 기능을 이어받아 별도 저장소와 버전 체계로 시작합니다. [이름 변경과 호환성](docs/pterm-rename.md)
 
 [앱 다운로드](https://github.com/Polar-Little-Lab/pTerm/releases/tag/v1.0.0) · [버전별 변경 이력](CHANGELOG.md) · [스크린샷 사용 가이드](docs/user-guide.md)
 
@@ -26,7 +26,7 @@ macOS용 로컬·SSH 통합 터미널. Tauri 2, React/TypeScript, Rust, xterm.js
 
 앱을 다시 실행하면 새 로컬 터미널 하나로 시작합니다. 이전 세션·출력·탭 배치를 복원하지 않습니다. 호스트·저장 명령·테마 설정은 유지됩니다.
 
-개발 브랜치의 확장 기능은 [터미널 도구](docs/terminal-tools.md), [연결·실행과 Python/JavaScript 자동화](docs/native-connections.md), [Xshell 기능 대응 상태](docs/xshell-parity.md)를 참조하세요. 배포 버전의 기능 및 Xshell 전체 기능과 동일하다고 의미하지 않습니다.
+main에 통합된 1.1.0 확장 기능은 [터미널 도구](docs/terminal-tools.md), [연결·실행과 Python/JavaScript 자동화](docs/native-connections.md), [Xshell 기능 대응 상태](docs/xshell-parity.md)를 참조하세요. 배포 버전의 기능 및 Xshell 전체 기능과 동일하다고 의미하지 않습니다.
 
 ## 개발 환경
 
