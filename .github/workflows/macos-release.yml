@@ -68,5 +68,5 @@ jobs:
         run: |
           set -euo pipefail
           VERSION=$(node -p "require('./app/package.json').version")
-          gh release create "v$VERSION" release-assets/* --target "$GITHUB_SHA" --title "pTerm $VERSION" --notes-file docs/release-1.1.0-public.md --draft
+          gh release create "v$VERSION" release-assets/* --target "$GITHUB_SHA" --title "pTerm $VERSION" --notes-file "docs/release-$VERSION-public.md" --draft
           gh release edit "v$VERSION" --draft=false --latest
