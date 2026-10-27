@@ -1,5 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod files;
+mod tunnels;
+mod socks;
+mod remote_forward;
+mod serial;
+mod programs;
+mod scripts;
+mod file_logs;
+mod text_export;
 mod local;
 mod ssh;
 mod session_end;
@@ -14,7 +22,7 @@ use std::{
     sync::{Arc, Mutex},
     time::Duration,
 };
-use tauri::{State, ipc::Channel};
+use tauri::{Manager, State, ipc::Channel};
 use tokio::sync::{mpsc, watch};
 
 enum Input {
@@ -24,6 +32,7 @@ enum Input {
 }
 #[derive(Clone)]
 struct SessionControl {
+    remote_routes: remote_forward::Routes,
     input: mpsc::Sender<Input>,
     cancel: watch::Sender<bool>,
     transport: Option<Arc<russh::client::Handle<ssh::VerifiedClient>>>,
@@ -69,6 +78,7 @@ async fn connect_ssh(
         None => None,
     };
     let mut parent_cancelled = parent.as_ref().map(|p| p.cancel.subscribe());
+    let routes=remote_forward::Routes::default();
     let (tx, mut rx) = mpsc::channel(64);
     let (cancel, mut cancelled) = watch::channel(false);
     {
@@ -88,6 +98,7 @@ async fn connect_ssh(
         sessions.insert(
             id.clone(),
             SessionControl {
+                remote_routes: routes.clone(),
                 input: tx,
                 cancel,
                 transport: None,
@@ -95,7 +106,7 @@ async fn connect_ssh(
         );
     }
     let connection = tokio::select! {
-        result = ssh::connect(request, parent.as_ref().and_then(|p| p.transport.clone())) => result,
+        result = ssh::connect_with_routes(request, parent.as_ref().and_then(|p| p.transport.clone()),routes) => result,
         _ = parent_closed(&mut parent_cancelled) => Err(ssh::ConnectError::Invalid {message: "Bastion 연결이 종료되었습니다.".into()}),
         _ = cancelled.changed() => Err(ssh::ConnectError::Invalid { message: "연결이 취소되었습니다.".into() }),
     };
@@ -233,7 +244,18 @@ fn main() {
         )))
         .manage(vault::Vault::default())
         .manage(files::Transfers::default())
-        .invoke_handler(tauri::generate_handler![
+        .manage(tunnels::Tunnels::default())
+        .manage(scripts::Scripts::default())
+        .manage(file_logs::Logs::default())
+        .manage(file_logs::ExitReady::default())
+        .invoke_handler(tauri::generate_handler![file_logs::start_file_log,file_logs::append_file_log,file_logs::stop_file_log,file_logs::finish_log_shutdown,scripts::start_script,scripts::script_response,scripts::stop_script,
+            text_export::save_text_file,
+            tunnels::start_tunnel,
+            tunnels::list_tunnels,
+            tunnels::stop_tunnel,
+            programs::preview_program,
+            serial::list_serial_ports,
+            serial::start_serial,
             take_demo_request,
             connect_ssh,
             local::start_local,
@@ -250,17 +272,21 @@ fn main() {
             files::transfer_file,
             files::cancel_transfer
         ])
+        .on_window_event(|window,event|{if let tauri::WindowEvent::CloseRequested{api,..}=event{api.prevent_close();window.app_handle().exit(0);}})
         .build(tauri::generate_context!())
         .expect("Polar Terminal could not start")
         .run(|app, event| {
-            use tauri::Manager;
+            use tauri::{Manager,Emitter};
             static EXITING: std::sync::atomic::AtomicBool =
                 std::sync::atomic::AtomicBool::new(false);
+            static EXIT_FINISHED:std::sync::atomic::AtomicBool=std::sync::atomic::AtomicBool::new(false);
             if let tauri::RunEvent::ExitRequested { api, .. } = event {
-                if EXITING.swap(true, std::sync::atomic::Ordering::SeqCst) {
-                    return;
-                }
+                if EXIT_FINISHED.load(std::sync::atomic::Ordering::SeqCst){return;}
                 api.prevent_exit();
+                if EXITING.swap(true, std::sync::atomic::Ordering::SeqCst) {return;}
+
+                let logs=app.state::<file_logs::Logs>().inner().clone();
+                let _=app.emit("prepare-exit",());
                 let sessions = app.state::<Sessions>().inner().clone();
                 if let Ok(map) = sessions.0.lock() {
                     for session in map.values() {
@@ -270,11 +296,13 @@ fn main() {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     for _ in 0..150 {
-                        if sessions.0.lock().map(|map| map.is_empty()).unwrap_or(true) {
+                        if sessions.0.lock().map(|map| map.is_empty()).unwrap_or(true) && logs.is_empty() && app.state::<file_logs::ExitReady>().0.load(std::sync::atomic::Ordering::SeqCst) {
                             break;
                         }
                         tokio::time::sleep(Duration::from_millis(20)).await;
                     }
+                    let _=tokio::time::timeout(Duration::from_secs(3),tauri::async_runtime::spawn_blocking(move||logs.finish())).await;
+                    EXIT_FINISHED.store(true,std::sync::atomic::Ordering::SeqCst);
                     app.exit(0);
                 });
             }

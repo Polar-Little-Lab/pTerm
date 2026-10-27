@@ -29,12 +29,36 @@ pub enum ConnectError {
 }
 
 pub struct VerifiedClient {
+    routes: crate::remote_forward::Routes,
     expected: Option<String>,
     observed: Arc<Mutex<Option<String>>>,
 }
 
 impl client::Handler for VerifiedClient {
     type Error = russh::Error;
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: russh::Channel<client::Msg>,
+        address: &str,
+        port: u32,
+        _origin: &str,
+        _origin_port: u32,
+        reply: client::ChannelOpenHandle,
+        _session: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        let route = if address == "127.0.0.1" {
+            self.routes
+                .lock()
+                .ok()
+                .and_then(|routes| routes.get(&port).cloned())
+        } else {
+            None
+        };
+        if let Some(route) = route {
+            crate::remote_forward::accept(channel, reply, route);
+        }
+        Ok(())
+    }
     async fn check_server_key(
         &mut self,
         key: &PublicKeyOrCertificate,
@@ -81,14 +105,22 @@ pub fn validate(request: &ConnectRequest) -> Result<(), ConnectError> {
 }
 
 pub async fn connect(
+    request: ConnectRequest,
+    bastion: Option<Arc<client::Handle<VerifiedClient>>>,
+) -> Result<(client::Handle<VerifiedClient>, russh::Channel<client::Msg>), ConnectError> {
+    connect_with_routes(request, bastion, Default::default()).await
+}
+pub async fn connect_with_routes(
     mut request: ConnectRequest,
     bastion: Option<Arc<client::Handle<VerifiedClient>>>,
+    routes: crate::remote_forward::Routes,
 ) -> Result<(client::Handle<VerifiedClient>, russh::Channel<client::Msg>), ConnectError> {
     let valid = validate(&request);
     let password = Zeroizing::new(std::mem::take(&mut request.password));
     valid?;
     let observed = Arc::new(Mutex::new(None));
     let handler = VerifiedClient {
+        routes,
         expected: request.fingerprint.clone(),
         observed: observed.clone(),
     };
@@ -243,13 +275,63 @@ mod tests {
 
     struct Echo {
         forwarding: bool,
-        streaming: std::collections::HashSet<ChannelId>,
+        streaming: Arc<Mutex<std::collections::HashSet<ChannelId>>>,
+        terminal_channels: std::collections::HashSet<ChannelId>,
+        remote_tasks: std::collections::HashMap<u32, tokio::task::JoinHandle<()>>,
         allowed_key: russh::keys::PublicKey,
         auth_count: Arc<AtomicUsize>,
         dimensions: Arc<Mutex<(u32, u32)>>,
     }
+    impl Drop for Echo {
+        fn drop(&mut self) {
+            for task in self.remote_tasks.values() {
+                task.abort();
+            }
+        }
+    }
     impl server::Handler for Echo {
         type Error = russh::Error;
+        async fn tcpip_forward(
+            &mut self,
+            address: &str,
+            port: &mut u32,
+            session: &mut server::Session,
+        ) -> Result<bool, Self::Error> {
+            if !self.forwarding || address != "127.0.0.1" {
+                return Ok(false);
+            }
+            let listener = tokio::net::TcpListener::bind(("127.0.0.1", *port as u16)).await?;
+            *port = listener.local_addr()?.port() as u32;
+            let bound = *port;
+            let handle = session.handle();
+            let streaming = self.streaming.clone();
+            let task = tokio::spawn(async move {
+                let mut copies = tokio::task::JoinSet::new();
+                loop {
+                    tokio::select! {
+                        _=copies.join_next(),if !copies.is_empty()=>{},
+                        accepted=listener.accept()=>{let Ok((mut socket,peer))=accepted else{break;};let handle=handle.clone();let streaming=streaming.clone();copies.spawn(async move{if let Ok(channel)=handle.channel_open_forwarded_tcpip("127.0.0.1",bound,peer.ip().to_string(),peer.port() as u32).await{streaming.lock().unwrap().insert(channel.id());let _=tokio::io::copy_bidirectional(&mut socket,&mut channel.into_stream()).await;}});}
+                    }
+                }
+            });
+            self.remote_tasks.insert(bound, task);
+            Ok(true)
+        }
+        async fn cancel_tcpip_forward(
+            &mut self,
+            address: &str,
+            port: u32,
+            _session: &mut server::Session,
+        ) -> Result<bool, Self::Error> {
+            if address != "127.0.0.1" {
+                return Ok(false);
+            }
+            if let Some(task) = self.remote_tasks.remove(&port) {
+                task.abort();
+                return Ok(true);
+            }
+            Ok(false)
+        }
         async fn channel_open_direct_tcpip(
             &mut self,
             channel: russh::Channel<server::Msg>,
@@ -265,7 +347,7 @@ mod tests {
                 return Ok(());
             }
             let mut target = tokio::net::TcpStream::connect(("127.0.0.1", port as u16)).await?;
-            self.streaming.insert(channel.id());
+            self.streaming.lock().unwrap().insert(channel.id());
             reply.accept().await;
             tokio::spawn(async move {
                 let _ =
@@ -299,10 +381,11 @@ mod tests {
         }
         async fn channel_open_session(
             &mut self,
-            _channel: russh::Channel<server::Msg>,
+            channel: russh::Channel<server::Msg>,
             reply: server::ChannelOpenHandle,
             _session: &mut server::Session,
         ) -> Result<(), Self::Error> {
+            self.terminal_channels.insert(channel.id());
             reply.accept().await;
             Ok(())
         }
@@ -335,7 +418,7 @@ mod tests {
             data: &[u8],
             session: &mut server::Session,
         ) -> Result<(), Self::Error> {
-            if !self.streaming.contains(&channel) {
+            if self.terminal_channels.contains(&channel) {
                 session.data(channel, data.to_vec())?;
             }
             Ok(())
@@ -397,6 +480,8 @@ mod tests {
                 let handler = Echo {
                     forwarding,
                     streaming: Default::default(),
+                    remote_tasks: Default::default(),
+                    terminal_channels: Default::default(),
                     allowed_key: allowed_key.clone(),
                     auth_count: count.clone(),
                     dimensions: dims.clone(),
@@ -665,31 +750,126 @@ mod tests {
     #[ignore = "Explicit real keepalive timeout fault injection"]
     async fn blackholed_tcp_is_detected_by_real_keepalives_and_new_connection_works() {
         let f = fixture().await;
-        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .unwrap();
         let proxy_port = listener.local_addr().unwrap().port();
         let upstream_port = f.port;
         let (stall, stalled) = tokio::sync::oneshot::channel::<()>();
         let proxy = tokio::spawn(async move {
             let (mut downstream, _) = listener.accept().await.unwrap();
-            let mut upstream = tokio::net::TcpStream::connect(("127.0.0.1", upstream_port)).await.unwrap();
+            let mut upstream = tokio::net::TcpStream::connect(("127.0.0.1", upstream_port))
+                .await
+                .unwrap();
             tokio::select! {
                 _ = tokio::io::copy_bidirectional(&mut downstream, &mut upstream) => {},
                 _ = stalled => { std::future::pending::<()>().await; }
             }
         });
-        let mut req = request(&f);req.port = proxy_port;
+        let mut req = request(&f);
+        req.port = proxy_port;
         let (handle, mut terminal) = connect(req, None).await.unwrap();
         terminal.data(&b"before-stall"[..]).await.unwrap();
-        tokio::time::timeout(Duration::from_secs(5), async {loop {if let Some(russh::ChannelMsg::Data {data})=terminal.wait().await {assert_eq!(&data[..],b"before-stall");break;}}}).await.unwrap();
-        stall.send(()).unwrap();let start=std::time::Instant::now();
-        let detected=tokio::time::timeout(Duration::from_secs(110),async {while terminal.wait().await.is_some() {}}).await;
-        proxy.abort();let _=proxy.await;drop(handle);
-        assert!(detected.is_ok(), "keepalive failed to detect blackholed TCP");
-        assert!(start.elapsed()>=Duration::from_secs(10), "proxy unexpectedly closed instead of stalling");
-        let (recovered, mut channel)=connect(request(&f),None).await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(russh::ChannelMsg::Data { data }) = terminal.wait().await {
+                    assert_eq!(&data[..], b"before-stall");
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        stall.send(()).unwrap();
+        let start = std::time::Instant::now();
+        let detected = tokio::time::timeout(Duration::from_secs(110), async {
+            while terminal.wait().await.is_some() {}
+        })
+        .await;
+        proxy.abort();
+        let _ = proxy.await;
+        drop(handle);
+        assert!(
+            detected.is_ok(),
+            "keepalive failed to detect blackholed TCP"
+        );
+        assert!(
+            start.elapsed() >= Duration::from_secs(10),
+            "proxy unexpectedly closed instead of stalling"
+        );
+        let (recovered, mut channel) = connect(request(&f), None).await.unwrap();
         channel.data(&b"after-recovery"[..]).await.unwrap();
-        tokio::time::timeout(Duration::from_secs(5),async {loop {if let Some(russh::ChannelMsg::Data {data})=channel.wait().await {assert_eq!(&data[..],b"after-recovery");break;}}}).await.unwrap();
-        recovered.disconnect(russh::Disconnect::ByApplication,"fixture complete","en").await.unwrap();
+        tokio::time::timeout(Duration::from_secs(5), async {
+            loop {
+                if let Some(russh::ChannelMsg::Data { data }) = channel.wait().await {
+                    assert_eq!(&data[..], b"after-recovery");
+                    break;
+                }
+            }
+        })
+        .await
+        .unwrap();
+        recovered
+            .disconnect(russh::Disconnect::ByApplication, "fixture complete", "en")
+            .await
+            .unwrap();
     }
 
+    #[tokio::test]
+    async fn remote_forward_routes_bytes_rejects_unregistered_ports_and_cancels() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let f = fixture_forwarding(true).await;
+            let target = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+                .await
+                .unwrap();
+            let target_port = target.local_addr().unwrap().port();
+            let routes: crate::remote_forward::Routes = Default::default();
+            let (client, mut terminal) = connect_with_routes(request(&f), None, routes.clone())
+                .await
+                .unwrap();
+            let remote = client.tcpip_forward("127.0.0.1", 0).await.unwrap();
+            let (cancel, _) = tokio::sync::watch::channel(false);
+            routes.lock().unwrap().insert(
+                remote,
+                crate::remote_forward::Route {
+                    host: "127.0.0.1".into(),
+                    port: target_port,
+                    cancel: cancel.clone(),
+                    limit: Arc::new(tokio::sync::Semaphore::new(1)),
+                },
+            );
+            let mut source = tokio::net::TcpStream::connect(("127.0.0.1", remote as u16))
+                .await
+                .unwrap();
+            let (mut destination, _) = target.accept().await.unwrap();
+            source.write_all(b"request").await.unwrap();
+            let mut bytes = [0; 7];
+            destination.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(&bytes, b"request");
+            destination.write_all(b"reply").await.unwrap();
+            let mut bytes = [0; 5];
+            source.read_exact(&mut bytes).await.unwrap();
+            assert_eq!(&bytes, b"reply");
+            cancel.send(true).unwrap();
+            assert_eq!(source.read(&mut bytes).await.unwrap_or(0), 0);
+            routes.lock().unwrap().remove(&remote);
+            let mut refused = tokio::net::TcpStream::connect(("127.0.0.1", remote as u16))
+                .await
+                .unwrap();
+            assert_eq!(refused.read(&mut bytes).await.unwrap_or(0), 0);
+            client
+                .cancel_tcpip_forward("127.0.0.1", remote)
+                .await
+                .unwrap();
+            assert_echo(&mut terminal).await;
+            assert!(
+                tokio::net::TcpStream::connect(("127.0.0.1", remote as u16))
+                    .await
+                    .is_err()
+            );
+        })
+        .await
+        .expect("remote forwarding timed out");
+    }
 }

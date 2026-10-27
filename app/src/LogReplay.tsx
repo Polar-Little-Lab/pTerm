@@ -1,0 +1,107 @@
+import { useEffect, useRef, useState } from "react";
+import type { Terminal } from "@xterm/xterm";
+export function LogReplay() {
+  const element = useRef<HTMLDivElement>(null),
+    terminal = useRef<Terminal | null>(null),
+    controller = useRef<AbortController | null>(null);
+  const [chunks, setChunks] = useState<{ time: string; text: string }[]>([]),
+    [busy, setBusy] = useState(false),
+    [status, setStatus] = useState("");
+  useEffect(() => {
+    let disposed = false;
+    let t: Terminal | undefined;
+    void import("@xterm/xterm")
+      .then(({ Terminal }) => {
+        if (disposed || !element.current) return;
+        t = new Terminal({
+          cols: 80,
+          rows: 16,
+          disableStdin: true,
+          scrollback: 5000,
+          fontSize: 12,
+        });
+        t.open(element.current);
+        terminal.current = t;
+      })
+      .catch((e) => {
+        if (!disposed) setStatus(String(e));
+      });
+    return () => {
+      disposed = true;
+      controller.current?.abort();
+      terminal.current = null;
+      t?.dispose();
+    };
+  }, []);
+  async function play() {
+    if (!terminal.current) return;
+    const abort = new AbortController();
+    controller.current = abort;
+    setBusy(true);
+    terminal.current.reset();
+    try {
+      for (let i = 0; i < chunks.length; i++) {
+        if (abort.signal.aborted) break;
+        const t = terminal.current;
+        if (!t) break;
+        await new Promise<void>((resolve) => t.write(chunks[i].text, resolve));
+        setStatus(`${i + 1} / ${chunks.length}`);
+        await new Promise((r) => setTimeout(r, 20));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <details>
+      <summary>저장한 로그 다시 보기</summary>
+      <p className="modal-description">
+        pTerm JSON 로그를 읽기 전용 터미널에 순서대로 표시합니다. 원격 서버에
+        연결하거나 명령을 보내지 않습니다.
+      </p>
+      <input
+        aria-label="로그 파일"
+        type="file"
+        accept=".json"
+        disabled={busy}
+        onChange={async (e) => {
+          const file = e.target.files?.[0];
+          setChunks([]);
+          if (!file) return;
+          try {
+            if (file.size > 8 * 1024 * 1024)
+              throw new Error("최대 8 MiB 로그를 선택하세요.");
+            const data = JSON.parse(await file.text());
+            if (
+              data.format !== "pterm-log" ||
+              data.version !== 1 ||
+              !Array.isArray(data.chunks) ||
+              data.chunks.length > 4096 ||
+              data.chunks.some(
+                (c: any) =>
+                  !c ||
+                  typeof c.time !== "string" ||
+                  typeof c.text !== "string",
+              )
+            )
+              throw new Error("pTerm JSON 로그 형식이 아닙니다.");
+            setChunks(data.chunks);
+            setStatus(`${data.chunks.length}개 기록을 불러왔습니다.`);
+          } catch (e) {
+            setStatus(String(e));
+          }
+        }}
+      />
+      <div className="tools-row">
+        <button disabled={!chunks.length || busy} onClick={() => void play()}>
+          순서대로 재생
+        </button>
+        <button disabled={!busy} onClick={() => controller.current?.abort()}>
+          중지
+        </button>
+      </div>
+      <p role="status">{status}</p>
+      <div ref={element} style={{ height: 280, overflow: "auto" }} />
+    </details>
+  );
+}

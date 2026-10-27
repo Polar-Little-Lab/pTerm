@@ -1,0 +1,88 @@
+.tools-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 18px 0;
+}
+.tools-nav button,
+.tools-row button {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--text);
+}
+.tools-nav button[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.tools-editor {
+  display: block;
+  width: 100%;
+  min-height: 160px;
+  font:
+    13px/1.6 ui-monospace,
+    monospace;
+  margin: 12px 0;
+  resize: vertical;
+}
+.tools-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 14px 0;
+}
+.tools-row label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tools-output {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 260px;
+  overflow: auto;
+  background: var(--surface-soft);
+  padding: 12px;
+  border-radius: 8px;
+  font:
+    12px/1.5 ui-monospace,
+    monospace;
+}
+.modal:has(.tools-nav) {
+  width: min(760px, calc(100vw - 32px));
+}
+.modal:has(.tools-nav) fieldset {
+  max-height: 160px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.modal:has(.tools-nav) input[type="checkbox"] {
+  width: auto;
+}
+
+.modal.native-connections { width: min(640px, calc(100vw - 32px)); }
+.native-connections > label, .native-connections details > label { display:flex;flex-direction:column;gap:8px;margin:16px 0;font-size:12px; }
+.native-connections .tools-row { margin:0;gap:8px; }
+.native-connections > .tools-row { margin:16px 0; }
+.native-connections details { padding:12px 14px;border:1px solid var(--line);border-radius:10px;margin:16px 0; }
+.native-connections summary { cursor:pointer;font-weight:600; }
+.native-connections .check-inline { display:flex;flex-direction:row;align-items:center;gap:8px;margin:12px 0; }
+.native-connections input[type=checkbox] { width:16px;height:16px;flex:none; }
+.native-connections .modal-actions { position:sticky;bottom:-28px;background:var(--surface);padding:16px 0;margin-bottom:-12px; }
+.native-connections [role=alert] { padding:12px;border:1px solid currentColor;border-radius:8px;overflow-wrap:anywhere; }
+.native-connections .form-row > label { min-width:0; }
+
+.preference-row{padding:12px 0;border-bottom:1px solid var(--line)}
+.preference-row small{margin-left:auto;color:var(--text-muted)}
+.preference-row .tools-row input{flex:1;min-width:0}
+.native-connections fieldset{border:1px solid var(--line);border-radius:10px;margin:18px 0;padding:12px}
+.tools-output code,.modal code{overflow-wrap:anywhere}
+.file-log-badge{font-size:9px;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--text-muted)}.file-log-badge.has-error{color:#c45b50}
+
+.modal:has(.tools-nav) details{margin:16px 0;padding:12px;border:1px solid var(--line);border-radius:8px}
+.modal:has(.tools-nav) details>label:not(.check-inline){display:flex;flex-direction:column;gap:8px;margin:12px 0}
+.modal:has(.tools-nav) .check-inline{display:flex;align-items:center;gap:8px}
+.modal:has(.tools-nav) summary{cursor:pointer;font-weight:600}
