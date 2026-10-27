@@ -49,3 +49,15 @@ test('bastion and target use separate secrets; temporary target secret never rea
 test('malformed persisted credentials are rejected',()=>{
  for(const value of [null,{},[{hostId:'x',scope:'s',secret:123}],[{hostId:'x',scope:'s',secret:'x'.repeat(16385)}]])assert.equal(validCredentials(value),false);
 });
+
+test('saved key passphrase survives reopening and is reused along an SSH/SFTP route',()=>{
+ const key={...host,authMethod:'key',keyPath:'/fixture/key'};
+ const saved=JSON.parse(JSON.stringify(storeCredential({...workspace,hosts:[key]},key,true,'key-passphrase')));
+ const run=new SshRouteRun(connectionRoute(key,saved.hosts));
+ assert.equal(savedSecret(saved,run.next([])),'key-passphrase');
+ const live={id:'shared-ssh',kind:'ssh',host:key,status:'connected',closed:false};
+ assert.equal(run.next([live]),undefined);
+ assert.equal(run.parentId,'shared-ssh');
+ const changed=new SshRouteRun(connectionRoute({...key,username:'other'},saved.hosts));
+ assert.equal(changed.next([live]).username,'other');
+});

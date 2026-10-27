@@ -103,3 +103,9 @@
 .host-connection-summary dd { margin:0;font-size:13px;overflow-wrap:anywhere; }
 .native-connections .connection-save { margin-bottom:8px; }
 @media(max-width:540px) { .modal.native-connections { width:calc(100vw - 24px);padding:20px;max-height:calc(100dvh - 24px); } .host-connection-summary dl { grid-template-columns:1fr;gap:12px; } }
+
+/* Keep host identity and primary actions visible while advanced fields scroll. */
+.native-connections .host-connection-summary{flex-shrink:0;max-height:28dvh}
+.connection-disclosure{display:flex;align-items:center;justify-content:space-between;width:100%;padding:12px 0;border:0;border-top:1px solid var(--line);background:transparent;color:inherit;flex-shrink:0;text-align:left;cursor:pointer}
+.advanced-connection{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.host-connect-actions{flex-wrap:wrap}

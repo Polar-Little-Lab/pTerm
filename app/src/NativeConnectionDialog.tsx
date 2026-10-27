@@ -34,7 +34,7 @@ export function NativeConnectionDialog({
 }: {
   host?: Host;
   connected?: boolean;
-  onConnect?: () => void;
+  onConnect?: (view: "terminal" | "files") => void;
   onEditHost?: () => void;
   workspace: Workspace;
   unlocked: boolean;
@@ -42,7 +42,7 @@ export function NativeConnectionDialog({
   onLaunch: (launch: NativeLaunch) => Promise<unknown>;
   onClose: () => void;
 }) {
-  const [page, setPage] = useState(host ? "host" : "options");
+  const [advanced, setAdvanced] = useState(!host);
   const [mode, setMode] = useState("ssh"),
     [request, setRequest] = useState<ProgramRequest>({
       mode: "ssh",
@@ -195,21 +195,19 @@ export function NativeConnectionDialog({
       busy={busy}
       onClose={onClose}
     >
-      {host && <nav className="connection-pages" aria-label="연결 설정 화면">
-        <button aria-pressed={page === "host"} disabled={busy} onClick={() => setPage("host")}>기본 연결</button>
-        <button aria-pressed={page === "options"} disabled={busy} onClick={() => setPage("options")}>고급 연결·전송</button>
-      </nav>}
-      {host && page === "host" ? <>
+      {host && <>
         <div className="host-connection-summary">
           <p className="host-connection-address">{host.username}@{host.host}:{host.port}</p>
           <dl><div><dt>인증</dt><dd>{host.authMethod === "key" ? "개인 키" : host.authMethod === "agent" ? "SSH Agent" : "비밀번호"}</dd></div>
           <div><dt>상태</dt><dd>{connected ? "연결된 세션 있음" : "연결 대기"}</dd></div>
           {host.group && <div><dt>그룹</dt><dd>{host.group}</dd></div>}
           {host.bastionHostId && <div><dt>경유 서버</dt><dd>{workspace.hosts.find(h => h.id === host.bastionHostId)?.name || "저장된 Bastion 경로"}</dd></div>}</dl>
-          <p className="modal-description">저장한 인증과 경유 경로로 연결합니다. 파일 탐색과 터미널 도구는 연결 후 사용할 수 있습니다.</p>
+          <p className="modal-description">SSH와 SFTP는 저장한 인증과 경유 경로를 함께 사용합니다. 이미 연결되어 있다면 다시 인증하지 않습니다.</p>
         </div>
-        <div className="modal-actions"><button onClick={onEditHost}>호스트 편집</button><button className="primary" onClick={onConnect}>{connected ? "터미널로 이동" : "연결"}</button></div>
-      </> : <>
+        <div className="modal-actions host-connect-actions"><button onClick={onEditHost}>호스트 편집</button><button onClick={() => onConnect?.("files")}>SFTP 파일 전송</button><button className="primary" onClick={() => onConnect?.("terminal")}>{connected ? "SSH 터미널로 이동" : "SSH 터미널"}</button></div>
+        <button className="connection-disclosure" aria-expanded={advanced} aria-controls="advanced-connection" disabled={busy} onClick={() => setAdvanced(!advanced)}><span>고급 연결·전송</span><span aria-hidden="true">{advanced ? "−" : "+"}</span></button>
+      </>}
+      {advanced && <div id="advanced-connection" className="advanced-connection">
       <div className="connection-fields">
       {host && <p className="modal-description">선택한 호스트의 주소를 가져왔습니다. 아래 작업은 별도 실행 엔진을 사용하며 기본 SSH 세션과 인증 저장소가 다릅니다.{host.bastionHostId && " 경유 서버는 점프 호스트에 별도로 지정하세요."}</p>}
       <label>
@@ -230,9 +228,10 @@ export function NativeConnectionDialog({
               setMode("ssh");
               setRequest({
                 mode: "ssh",
-                host: "",
-                port: 22,
-                username: "",
+                host: host?.host || "",
+                port: host?.port || 22,
+                username: host?.username || "",
+                identity: host?.keyPath,
                 tls: true,
               });
               setArgs("[]");
@@ -718,7 +717,7 @@ export function NativeConnectionDialog({
               : "설정 확인"}
         </button>
       </div>
-      </>}
+      </div>}
     </Modal>
   );
 }

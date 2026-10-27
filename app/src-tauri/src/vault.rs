@@ -133,13 +133,9 @@ pub async fn unlock_vault(app: tauri::AppHandle) -> Result<String, String> {
             })
             .optional()
             .map_err(|_| "Vault 읽기 실패")?;
-        let cold_unlock = guard.is_none();
         let mut used_legacy = false;
-        if guard.is_none() && service != legacy_service {
-            // Rename without reading secrets or requesting UI, if ACLs permit it.
-            // Otherwise the explicit unlock below can read the legacy key once.
-            let _ = crate::keychain_migration::rename(&legacy_service, &service, ACCOUNT, KEYCHAIN_LABEL);
-        }
+        // Unlock only reads the secret. Branding/ACL mutations can cause extra
+        // macOS authorization prompts and do not belong in authentication.
         let (key, text) = workspace_with_key(
             guard.as_ref().map(|key| key.as_slice()),
             existing.as_deref(),
@@ -168,13 +164,6 @@ pub async fn unlock_vault(app: tauri::AppHandle) -> Result<String, String> {
             // Keep the legacy item as a recovery copy. Add-only prevents overwrite.
             if let Err(code) = crate::keychain_migration::add_key(&service, ACCOUNT, KEYCHAIN_LABEL, &key) {
                 let _ = app.emit("vault-keychain-notice", format!("저장된 항목은 열렸지만 키체인 이름 전환을 완료하지 못했습니다. 다음 잠금 해제 때 다시 시도합니다. (오류 {code})"));
-            }
-        }
-        if cold_unlock && service != legacy_service {
-            // Only update branding metadata; preserve the existing secret and identity.
-            let _ = crate::keychain_migration::rename(&service, &service, ACCOUNT, KEYCHAIN_LABEL);
-            if let Err(code) = crate::keychain_prompt::update(&service, ACCOUNT, &legacy_service, KEYCHAIN_LABEL) {
-                let _ = app.emit("vault-keychain-notice", format!("저장된 항목은 열렸지만 macOS 승인창 이름을 갱신하지 못했습니다. (오류 {code})"));
             }
         }
         *guard = Some(key);

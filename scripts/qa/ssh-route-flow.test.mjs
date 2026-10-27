@@ -12,11 +12,11 @@ const wanted=new Set(['abortRoute','startRoute','openHost','connect','reconnect'
 function visit(n){if(ts.isVariableDeclaration(n)&&wanted.has(n.name.getText(source)))parts.push('const '+n.getText(source)+';');if(ts.isExpressionStatement(n)&&n.getText(source).startsWith('advanceRoute.current='))parts.push(n.getText(source));ts.forEachChild(n,visit);}visit(source);
 const production=ts.transpileModule(parts.join('\n'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.None}}).outputText;
 const factory=new Function('connectionRoute','SshRouteRun','hosts','adapter','layout','credentials',`
- const {savedSecret,storeCredential,pruneCredentials}=credentials;const {paneIds,replacePane,removePane,setTabTree,newTab,removeSession}=layout;const state={};const reconnectTarget={current:null};const sessionsRef={items:[],get current(){return this.items},set current(items){this.items=items;for(const s of items)s.terminal??={dispose(){}}}},dataRef={current:{hosts}},routeRun={current:null},connecting={current:false},advanceRoute={current:()=>{}};
+ const {savedSecret,storeCredential,pruneCredentials}=credentials;const {paneIds,replacePane,removePane,setTabTree,newTab,removeSession}=layout;const state={files:[]};const connectionView={current:"terminal"};const setFileSessions=fn=>state.files=fn(state.files);const reconnectTarget={current:null};const sessionsRef={items:[],get current(){return this.items},set current(items){this.items=items;for(const s of items)s.terminal??={dispose(){}}}},dataRef={current:{hosts}},routeRun={current:null},connecting={current:false},advanceRoute={current:()=>{}};
  const desktop=true,unlocked=true,quickConnect=true,activeRef={current:null};let password='',bastionSessionId='',rememberSecret=false;const setRememberSecret=v=>rememberSecret=v;const update=async fn=>{dataRef.current=pruneCredentials(fn(dataRef.current));return true;};
- const setPending=v=>state.pending=v,setError=v=>state.error=v,setNotice=()=>{},setMode=()=>{},setLayoutOpen=()=>{},setSidebar=()=>{},setActive=v=>state.active=typeof v==='function'?v(state.active):v,setSection=()=>{},setShowPassword=()=>{},setQuickConnect=()=>{},setVerified=()=>{};
+ const setPending=v=>state.pending=v,setError=v=>state.error=v,setNotice=()=>{},setMode=v=>state.mode=v,setLayoutOpen=()=>{},setSidebar=()=>{},setActive=v=>state.active=typeof v==='function'?v(state.active):v,setSection=()=>{},setShowPassword=()=>{},setQuickConnect=()=>{},setVerified=()=>{};
  const setSelected=v=>state.selected=v,setPassword=v=>{password=v;state.password=v},setBastionSessionId=v=>{bastionSessionId=v},setShowConnection=v=>state.prompt=v,setTrust=v=>state.trust=v;
- const recoveryTimers={current:new Map()},recoverLatest={current:()=>{}};const activate=id=>state.active=id,navigate=()=>{},refresh=()=>{},updateSessions=v=>sessionsRef.current=v,tabState={ref:{current:[]},update(fn){this.ref.current=fn(this.ref.current)},add(id){this.ref.current.push(newTab(id))},remove(id){this.update(t=>removeSession(t,id))}};
+ const recoveryTimers={current:new Map()},recoverLatest={current:()=>{}};const activate=id=>{state.active=id;state.mode="terminal"},navigate=()=>{},refresh=()=>{},updateSessions=v=>sessionsRef.current=v,tabState={ref:{current:[]},update(fn){this.ref.current=fn(this.ref.current)},add(id){this.ref.current.push(newTab(id))},remove(id){this.update(t=>removeSession(t,id))}};
  const layoutRef={current:null};
  // Preferences and file persistence have dedicated tests; this adapter isolates route control.
  const configureSession=()=>{},runLoginCommand=()=>Promise.resolve(),stopFileLog=()=>Promise.resolve();
@@ -110,4 +110,26 @@ test('unchecked credentials remain one-time, checked credentials persist after s
  assert.equal(savedSecret(app.dataRef.current,gateway),undefined);
  app.close(app.sessionsRef.current[0]);app.openHost(gateway);app.setRememberSecret(true);await app.submit('remembered');
  assert.equal(savedSecret(app.dataRef.current,gateway),'remembered');
+});
+
+test('SFTP launch waits for authentication then reuses SSH without another prompt',async()=>{
+ const calls=[];const app=harness(async a=>{calls.push(a)});
+ app.openHost(target,'files');await app.submit('gateway');await app.submit('target');
+ assert.equal(app.state.mode,'files');assert.deepEqual(app.state.files,[calls[1].id]);
+ app.openHost(target,'terminal');assert.equal(app.state.mode,'terminal');
+ app.openHost(target,'files');assert.equal(app.state.mode,'files');assert.equal(calls.length,2);
+ assert.equal(app.state.prompt,false);assert.equal(app.state.files.length,1);
+});
+test('cancelled SFTP intent does not leak into the next SSH connection',async()=>{
+ const app=harness(async()=>{});app.openHost(target,'files');app.abortRoute();
+ app.openHost(gateway);await app.submit('password');
+ assert.equal(app.state.mode,'terminal');assert.deepEqual(app.state.files,[]);
+});
+test('saved encrypted-key passphrase connects without asking again',async()=>{
+ const calls=[];const app=harness(async a=>{calls.push(a)});
+ const key={...gateway,authMethod:'key',keyPath:'/fixture/key'};
+ app.dataRef.current={hosts:[key]};app.dataRef.current=storeCredential(app.dataRef.current,key,true,'saved-key-passphrase');
+ app.openHost(key,'files');await tick();await tick();
+ assert.equal(calls.length,1);assert.equal(calls[0].request.password,'saved-key-passphrase');
+ assert.equal(app.state.prompt,false);assert.equal(app.state.mode,'files');
 });
