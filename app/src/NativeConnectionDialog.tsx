@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open, save } from "@tauri-apps/plugin-dialog";
 import { Modal } from "./components";
-import type { Workspace } from "./types";
+import type { Host, Workspace } from "./types";
 import {
   applyProfile,
   type NativeLaunch,
@@ -22,24 +22,34 @@ const titles: Record<string, string> = {
   rlogin: "Rlogin",
 };
 export function NativeConnectionDialog({
+  host,
+  connected = false,
+  onConnect,
+  onEditHost,
   workspace,
   unlocked,
   onUpdate,
   onLaunch,
   onClose,
 }: {
+  host?: Host;
+  connected?: boolean;
+  onConnect?: () => void;
+  onEditHost?: () => void;
   workspace: Workspace;
   unlocked: boolean;
   onUpdate: (fn: (w: Workspace) => Workspace) => Promise<boolean>;
   onLaunch: (launch: NativeLaunch) => Promise<unknown>;
   onClose: () => void;
 }) {
+  const [page, setPage] = useState(host ? "host" : "options");
   const [mode, setMode] = useState("ssh"),
     [request, setRequest] = useState<ProgramRequest>({
       mode: "ssh",
-      host: "",
-      port: 22,
-      username: "",
+      host: host?.host || "",
+      port: host?.port || 22,
+      username: host?.username || "",
+      identity: host?.keyPath,
       tls: true,
     }),
     [serial, setSerial] = useState({
@@ -64,11 +74,11 @@ export function NativeConnectionDialog({
     [presetId, setPresetId] = useState(""),
     [editingProfile, setEditingProfile] = useState(false);
   useEffect(() => {
-    if (isTauri())
+    if (isTauri() && mode === "serial")
       void invoke<string[]>("list_serial_ports")
         .then(setPorts)
         .catch((e) => setError(String(e)));
-  }, []);
+  }, [mode]);
   const change = (key: keyof ProgramRequest, value: unknown) => {
     setRequest((r) => ({ ...r, [key]: value }));
     setPreview(null);
@@ -180,11 +190,28 @@ export function NativeConnectionDialog({
   return (
     <Modal
       className="native-connections"
-      title="연결·실행"
-      eyebrow="NATIVE CONNECTIONS"
+      title={host ? host.name || host.host : "기타 연결·실행"}
+      eyebrow={host ? "HOST CONNECTION" : "CONNECTION TOOLS"}
       busy={busy}
       onClose={onClose}
     >
+      {host && <nav className="connection-pages" aria-label="연결 설정 화면">
+        <button aria-pressed={page === "host"} disabled={busy} onClick={() => setPage("host")}>기본 연결</button>
+        <button aria-pressed={page === "options"} disabled={busy} onClick={() => setPage("options")}>고급 연결·전송</button>
+      </nav>}
+      {host && page === "host" ? <>
+        <div className="host-connection-summary">
+          <p className="host-connection-address">{host.username}@{host.host}:{host.port}</p>
+          <dl><div><dt>인증</dt><dd>{host.authMethod === "key" ? "개인 키" : host.authMethod === "agent" ? "SSH Agent" : "비밀번호"}</dd></div>
+          <div><dt>상태</dt><dd>{connected ? "연결된 세션 있음" : "연결 대기"}</dd></div>
+          {host.group && <div><dt>그룹</dt><dd>{host.group}</dd></div>}
+          {host.bastionHostId && <div><dt>경유 서버</dt><dd>{workspace.hosts.find(h => h.id === host.bastionHostId)?.name || "저장된 Bastion 경로"}</dd></div>}</dl>
+          <p className="modal-description">저장한 인증과 경유 경로로 연결합니다. 파일 탐색과 터미널 도구는 연결 후 사용할 수 있습니다.</p>
+        </div>
+        <div className="modal-actions"><button onClick={onEditHost}>호스트 편집</button><button className="primary" onClick={onConnect}>{connected ? "터미널로 이동" : "연결"}</button></div>
+      </> : <>
+      <div className="connection-fields">
+      {host && <p className="modal-description">선택한 호스트의 주소를 가져왔습니다. 아래 작업은 별도 실행 엔진을 사용하며 기본 SSH 세션과 인증 저장소가 다릅니다.{host.bastionHostId && " 경유 서버는 점프 호스트에 별도로 지정하세요."}</p>}
       <label>
         저장한 연결
         <select
@@ -424,7 +451,7 @@ export function NativeConnectionDialog({
             </>
           )}
           {mode === "ssh" && (
-            <details open>
+            <details>
               <summary>고급 인증·포워딩</summary>
               {field("OpenSSH 인증서", "certificate")}
               {field("PKCS#11 공급자 라이브러리", "provider")}
@@ -534,6 +561,7 @@ export function NativeConnectionDialog({
           </details>
         </>
       )}
+      <details className="connection-save"><summary>연결 저장·인증 프로필 관리</summary>
       {mode === "ssh" && (
         <label>
           인증 프로필 이름
@@ -646,6 +674,7 @@ export function NativeConnectionDialog({
       {!unlocked && (
         <p>연결·인증 프로필을 저장하려면 먼저 저장소를 잠금 해제하세요.</p>
       )}
+      </details>
       {preview && (
         <pre className="tools-output">
           {preview.executable}
@@ -654,6 +683,7 @@ export function NativeConnectionDialog({
         </pre>
       )}
       {error && <p role="alert">{error}</p>}
+      </div>
       <div className="modal-actions">
         <button onClick={onClose} disabled={busy}>
           취소
@@ -688,6 +718,7 @@ export function NativeConnectionDialog({
               : "설정 확인"}
         </button>
       </div>
+      </>}
     </Modal>
   );
 }

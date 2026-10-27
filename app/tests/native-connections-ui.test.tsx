@@ -134,3 +134,31 @@ test("native dialog loads current profile, previews before launch and retains la
   dom.window.close();
   delete (globalThis as any).isTauri;
 });
+
+test("host connection opens a compact summary and keeps advanced actions in the same dialog", async () => {
+  const dom = new JSDOM('<div id="mount"></div>');
+  Object.assign(globalThis, { window: dom.window, document: dom.window.document, IS_REACT_ACT_ENVIRONMENT: true });
+  const { createRoot } = await import("react-dom/client");
+  const root = createRoot(document.getElementById("mount")!);
+  const host = { id: "host", name: "Production", host: "prod.example", port: 2222, username: "polar", authMethod: "key" as const, keyPath: "/keys/prod" };
+  let connections = 0;
+  await act(async () => root.render(<NativeConnectionDialog host={host} workspace={{version:1,hosts:[host],snippets:[]}} unlocked onConnect={()=>{connections++;}} onEditHost={()=>{}} onUpdate={async()=>true} onClose={()=>{}} onLaunch={async()=>{throw Error("must not launch externally");}}/>));
+  const button = (name:string) => [...document.querySelectorAll("button")].find(b=>b.textContent===name)!;
+  assert.match(document.body.textContent!, /polar@prod.example:2222/);
+  assert.equal(document.querySelectorAll("input").length, 0);
+  await act(()=>button("연결").click());
+  assert.equal(connections, 1);
+  await act(()=>button("고급 연결·전송").click());
+  assert.equal(document.querySelectorAll('[role="dialog"]').length, 1);
+  const input = (label:string) => [...document.querySelectorAll("label")].find(l=>l.textContent?.trim().startsWith(label))?.querySelector("input");
+  assert.equal(input("호스트")?.value, "prod.example");
+  assert.equal(input("포트")?.value, "2222");
+  assert.equal(input("개인 키")?.value, "/keys/prod");
+  assert.ok([...document.querySelectorAll("details")].every(d=>!d.open));
+  const footer = document.querySelector(".modal-actions")!;
+  assert.equal(footer.closest(".connection-fields"), null);
+  await act(()=>button("기본 연결").click());
+  assert.equal(document.querySelectorAll("input").length, 0);
+  await act(()=>root.unmount());
+  dom.window.close();
+});

@@ -86,3 +86,20 @@
 .modal:has(.tools-nav) details>label:not(.check-inline){display:flex;flex-direction:column;gap:8px;margin:12px 0}
 .modal:has(.tools-nav) .check-inline{display:flex;align-items:center;gap:8px}
 .modal:has(.tools-nav) summary{cursor:pointer;font-weight:600}
+
+/* Keep the connection identity and actions visible; only long advanced forms scroll. */
+.modal.native-connections { width:min(720px,calc(100vw - 48px)); max-height:calc(100dvh - 64px); overflow:hidden; display:flex; flex-direction:column; }
+.native-connections .modal-heading,.native-connections .connection-pages,.native-connections .modal-actions { flex-shrink:0; }
+.native-connections .connection-fields { overflow-y:auto; min-height:0; padding:0 8px 0 0; scrollbar-width:thin; scrollbar-color:var(--line) transparent; overscroll-behavior:contain; }
+.native-connections .connection-fields>label,.native-connections .connection-fields>details>label { display:flex;flex-direction:column;gap:8px;margin:14px 0;font-size:12px; }
+.native-connections .modal-actions { position:static; margin:16px 0 0; padding:16px 0 0; background:transparent; }
+.connection-pages { display:flex; gap:6px; padding:4px; border:1px solid var(--line); border-radius:12px; margin-bottom:18px; }
+.connection-pages button { flex:1; padding:10px 14px; border-radius:8px; background:transparent; }
+.connection-pages button[aria-pressed=true] { background:var(--surface); box-shadow:0 2px 8px #16324b12; font-weight:600; }
+.host-connection-summary { min-height:0; overflow-y:auto; scrollbar-width:thin; }
+.host-connection-address { overflow-wrap:anywhere; font-family:monospace; font-size:14px; margin:8px 0 24px; }
+.host-connection-summary dl { display:grid;grid-template-columns:1fr 1fr;gap:20px;margin:0 0 20px; }
+.host-connection-summary dt { font-size:11px;opacity:.65;margin-bottom:7px; }
+.host-connection-summary dd { margin:0;font-size:13px;overflow-wrap:anywhere; }
+.native-connections .connection-save { margin-bottom:8px; }
+@media(max-width:540px) { .modal.native-connections { width:calc(100vw - 24px);padding:20px;max-height:calc(100dvh - 24px); } .host-connection-summary dl { grid-template-columns:1fr;gap:12px; } }
