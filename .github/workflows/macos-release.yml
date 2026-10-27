@@ -47,7 +47,7 @@ jobs:
           test "$VERSION" = "$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
           APP=app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/pTerm.app
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
-          lipo -verify_arch arm64 "$APP/Contents/MacOS/pterm"
+          lipo "$APP/Contents/MacOS/pterm" -verify_arch arm64
           codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
           mkdir -p release-assets
