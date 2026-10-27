@@ -1,0 +1,21 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import React, {act} from 'react';
+import {JSDOM} from 'jsdom';
+import {Modal} from '../src/components';
+test('collapsed settings do not capture initial focus or the modal Tab loop', async()=>{
+ const dom=new JSDOM('<div id="mount"></div>');
+ Object.assign(globalThis,{window:dom.window,document:dom.window.document,IS_REACT_ACT_ENVIRONMENT:true});
+ const {createRoot}=await import('react-dom/client');
+ const root=createRoot(document.getElementById('mount')!);
+ await act(()=>root.render(<Modal title="Connection" eyebrow="TEST" onClose={()=>{}}><details><summary>Advanced</summary><input aria-label="Hidden"/></details><button id="connect">Connect</button></Modal>));
+ const close=document.querySelector<HTMLButtonElement>('[aria-label="창 닫기"]')!;
+ assert.equal(document.activeElement,close);
+ const connect=document.getElementById('connect')!;
+ connect.focus();
+ connect.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',bubbles:true,cancelable:true}));
+ assert.equal(document.activeElement,close);
+ close.dispatchEvent(new dom.window.KeyboardEvent('keydown',{key:'Tab',shiftKey:true,bubbles:true,cancelable:true}));
+ assert.equal(document.activeElement,connect);
+ await act(()=>root.unmount());dom.window.close();
+});
