@@ -21,7 +21,7 @@ export function FileLogControls({
     ),
     [, refresh] = useState(0);
   const log = fileLogFor(session),
-    active = log && !["stopped", "error"].includes(log.status);
+    active = log && !log.isClosed;
   return (
     <details open>
       <summary>파일에 연속 기록</summary>
@@ -154,6 +154,7 @@ export function FileLogControls({
             <>
               <br />
               {log.error}
+              {!log.isClosed && " · 파일 정리 중"}
             </>
           )}
         </p>

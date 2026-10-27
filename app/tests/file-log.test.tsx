@@ -179,3 +179,56 @@ test("4096 tiny queued chunks still flush in order at the supported limit", asyn
   assert.equal(log.status, "stopped");
   assert.deepEqual(recorded, expected);
 });
+for (const phase of ["start", "append", "stop"] as const) {
+  test(`throwing error observer cannot interrupt cleanup after ${phase} failure`, async () => {
+    let closed = 0;
+    let notifications = 0;
+    const io: LogIO = {
+      start: async () => {
+        if (phase === "start") throw Error("open failed");
+        return info;
+      },
+      append: async () => {
+        if (phase === "append") throw Error("write failed");
+        return info;
+      },
+      stop: async () => {
+        closed++;
+        if (phase === "stop") throw Error("close failed");
+      },
+    };
+    const log = new FileLog("id", options, io, () => {
+      notifications++;
+      assert.equal(log.status, "error");
+      throw Error("observer failed");
+    });
+    log.write(new Uint8Array([1]));
+    await log.stop();
+    assert.equal(log.status, "error");
+    assert.equal(log.isClosed, true);
+    assert.doesNotMatch(log.error, /observer/);
+    assert.equal(closed, phase === "start" ? 0 : 1);
+    assert.equal(notifications, 1);
+  });
+}
+test("error state does not permit restart until native cleanup finishes", async () => {
+  let release!: () => void;
+  let closing!: () => void;
+  const entered = new Promise<void>((r) => (closing = r));
+  const log = new FileLog("id", options, {
+    start: async () => info,
+    append: async () => { throw Error("disk full"); },
+    stop: () => {
+      closing();
+      return new Promise((r) => (release = r));
+    },
+  });
+  log.write(new Uint8Array([1]));
+  const stopped = log.stop();
+  await entered;
+  assert.equal(log.status, "error");
+  assert.equal(log.isClosed, false);
+  release();
+  await stopped;
+  assert.equal(log.isClosed, true);
+});

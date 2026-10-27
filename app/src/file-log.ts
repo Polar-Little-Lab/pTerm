@@ -44,14 +44,23 @@ export class FileLog {
     void this.begin();
   }
   private fail(error: unknown) {
-    if (!this.error) {
-      this.error = String(error);
-      this.onError(this.error);
-    }
+    const notify = !this.error;
+    if (notify) this.error = String(error);
     this.status = "error";
     this.accepting = false;
     this.pending = [];
     this.queued = 0;
+    // Reporting must never interrupt file cleanup or leave stop() unresolved.
+    if (notify) {
+      try {
+        this.onError(this.error);
+      } catch {
+        // The original failure remains visible through status/error.
+      }
+    }
+  }
+  get isClosed() {
+    return this.finished;
   }
   private async begin() {
     try {
@@ -159,7 +168,7 @@ export function startFileLog(
   onError: (error: string) => void,
 ) {
   const previous = fileLogFor(session);
-  if (previous && !["stopped", "error"].includes(previous.status))
+  if (previous && !previous.isClosed)
     throw new Error("기존 파일 기록을 먼저 중지하세요.");
   if (!isTauri()) throw new Error("파일 기록은 macOS 앱에서 지원합니다.");
   const logger = new FileLog(
