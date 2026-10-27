@@ -22,6 +22,7 @@ pub struct ConnectRequest {
 #[serde(tag = "kind", rename_all = "camelCase")]
 pub enum ConnectError {
     Invalid { message: String },
+    KeyDecode { message: String },
     HostKey { fingerprint: String, changed: bool },
     Authentication,
     Network { message: String },
@@ -195,13 +196,13 @@ pub async fn connect_with_routes(
                 let mut bytes = Zeroizing::new(Vec::new());
                 file.take(262145)
                     .read_to_end(&mut bytes)
-                    .map_err(|_| ConnectError::Authentication)?;
+                    .map_err(|_| ConnectError::Invalid { message: "개인 키 파일을 읽을 수 없습니다.".into() })?;
                 if bytes.len() > 262144 {
                     return Err(ConnectError::Invalid {
                         message: "키 파일 크기가 너무 큽니다.".into(),
                     });
                 }
-                let text = std::str::from_utf8(&bytes).map_err(|_| ConnectError::Authentication)?;
+                let text = std::str::from_utf8(&bytes).map_err(|_| ConnectError::Invalid { message: "지원하는 개인 키 파일 형식이 아닙니다.".into() })?;
                 russh::keys::decode_secret_key(
                     text,
                     if password.is_empty() {
@@ -210,7 +211,7 @@ pub async fn connect_with_routes(
                         Some(password.as_str())
                     },
                 )
-                .map_err(|_| ConnectError::Invalid {
+                .map_err(|_| ConnectError::KeyDecode {
                     message: "개인 키 형식 또는 키 암호를 확인하세요.".into(),
                 })
             })
@@ -613,6 +614,16 @@ mod tests {
             .unwrap();
     }
     #[tokio::test]
+    async fn missing_key_file_is_not_a_passphrase_error() {
+        let f = fixture().await;
+        let directory = tempfile::tempdir().unwrap();
+        let mut req = request(&f);
+        req.auth_method = "key".into();
+        req.key_path = directory.path().join("missing").to_string_lossy().into_owned();
+        assert!(matches!(connect(req, None).await, Err(ConnectError::Invalid { .. })));
+        assert_eq!(f.auth.load(Ordering::SeqCst), 0);
+    }
+    #[tokio::test]
     async fn wrong_key_passphrase_does_not_authenticate() {
         let f = fixture().await;
         let directory = tempfile::tempdir().unwrap();
@@ -628,7 +639,7 @@ mod tests {
         req.password = "wrong".into();
         assert!(matches!(
             connect(req, None).await,
-            Err(ConnectError::Invalid { .. })
+            Err(ConnectError::KeyDecode { .. })
         ));
         assert_eq!(f.auth.load(Ordering::SeqCst), 0);
     }

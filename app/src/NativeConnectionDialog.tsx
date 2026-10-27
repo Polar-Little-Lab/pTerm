@@ -204,7 +204,7 @@ export function NativeConnectionDialog({
           {host.bastionHostId && <div><dt>경유 서버</dt><dd>{workspace.hosts.find(h => h.id === host.bastionHostId)?.name || "저장된 Bastion 경로"}</dd></div>}</dl>
           <p className="modal-description">SSH와 SFTP는 저장한 인증과 경유 경로를 함께 사용합니다. 이미 연결되어 있다면 다시 인증하지 않습니다.</p>
         </div>
-        <div className="modal-actions host-connect-actions"><button onClick={onEditHost}>호스트 편집</button><button onClick={() => onConnect?.("files")}>SFTP 파일 전송</button><button className="primary" onClick={() => onConnect?.("terminal")}>{connected ? "SSH 터미널로 이동" : "SSH 터미널"}</button></div>
+
         <button className="connection-disclosure" aria-expanded={advanced} aria-controls="advanced-connection" disabled={busy} onClick={() => setAdvanced(!advanced)}><span>고급 연결·전송</span><span aria-hidden="true">{advanced ? "−" : "+"}</span></button>
       </>}
       {advanced && <div id="advanced-connection" className="advanced-connection">
@@ -684,7 +684,7 @@ export function NativeConnectionDialog({
       {error && <p role="alert">{error}</p>}
       </div>
       <div className="modal-actions">
-        <button onClick={onClose} disabled={busy}>
+        <button className="secondary" onClick={onClose} disabled={busy}>
           취소
         </button>
         <button
@@ -718,6 +718,7 @@ export function NativeConnectionDialog({
         </button>
       </div>
       </div>}
+      {host && <div className="modal-actions host-connect-actions"><button className="secondary" disabled={busy} onClick={onEditHost}>호스트 편집</button><button className="secondary" disabled={busy} onClick={() => onConnect?.("files")}>SFTP 파일 전송</button><button className="primary" disabled={busy} onClick={() => onConnect?.("terminal")}>{connected ? "SSH 터미널로 이동" : "SSH 터미널"}</button></div>}
     </Modal>
   );
 }

@@ -146,6 +146,9 @@ test("host connection opens a compact summary and keeps advanced actions in the 
   const button = (name:string) => [...document.querySelectorAll("button")].find(b=>b.textContent===name || b.querySelector("span")?.textContent===name)!;
   assert.match(document.body.textContent!, /polar@prod.example:2222/);
   assert.equal(document.querySelectorAll("input").length, 0);
+  assert.ok(button("호스트 편집").classList.contains("secondary"));
+  assert.ok(button("SFTP 파일 전송").classList.contains("secondary"));
+  assert.ok(button("고급 연결·전송").compareDocumentPosition(button("SSH 터미널")) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   await act(()=>button("SSH 터미널").click());
   assert.deepEqual(connections, ["terminal"]);
   await act(()=>button("SFTP 파일 전송").click());
@@ -161,6 +164,7 @@ test("host connection opens a compact summary and keeps advanced actions in the 
   assert.equal(footer.closest(".connection-fields"), null);
   assert.match(document.querySelector(".host-connection-summary")!.textContent!, /prod.example/);
   assert.equal(button("고급 연결·전송").getAttribute("aria-expanded"), "true");
+  assert.ok(document.getElementById("advanced-connection")!.compareDocumentPosition(document.querySelector(".host-connect-actions")!) & dom.window.Node.DOCUMENT_POSITION_FOLLOWING);
   await act(()=>button("고급 연결·전송").click());
   assert.equal(button("고급 연결·전송").getAttribute("aria-expanded"), "false");
   assert.equal(document.querySelectorAll("input").length, 0);

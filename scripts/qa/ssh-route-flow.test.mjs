@@ -133,3 +133,17 @@ test('saved encrypted-key passphrase connects without asking again',async()=>{
  assert.equal(calls.length,1);assert.equal(calls[0].request.password,'saved-key-passphrase');
  assert.equal(app.state.prompt,false);assert.equal(app.state.mode,'files');
 });
+
+test('SFTP key file errors are not presented as passphrase requests',async()=>{
+ const app=harness(async()=>{throw {kind:'invalid',message:'개인 키 파일을 열 수 없습니다.'}});
+ const key={...gateway,authMethod:'key',keyPath:'/missing'};app.dataRef.current={hosts:[key]};
+ app.openHost(key,'files');await tick();await tick();
+ assert.equal(app.state.prompt,false);assert.equal(app.routeRun.current,null);
+ assert.match(app.state.error,/개인 키 파일을 열 수 없습니다/);
+});
+test('SFTP key decoding failure allows retry without losing the requested file view',async()=>{
+ let fail=true;const app=harness(async()=>{if(fail)throw {kind:'keyDecode',message:'키 파일 또는 암호 확인'};});
+ const key={...gateway,authMethod:'key',keyPath:'/encrypted'};app.dataRef.current={hosts:[key]};
+ app.openHost(key,'files');await tick();await tick();assert.equal(app.state.prompt,true);
+ fail=false;await app.submit('correct');assert.equal(app.state.mode,'files');assert.equal(app.state.prompt,false);
+});
