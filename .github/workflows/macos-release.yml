@@ -1,0 +1,72 @@
+name: macOS release
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/macos-release.yml'
+      - 'app/src-tauri/tauri.conf.json'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: macos-release
+  cancel-in-progress: false
+jobs:
+  release:
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - run: rustup toolchain install 1.90.0 --profile minimal --target aarch64-apple-darwin
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            app/src-tauri/target
+          key: macos-release-arm64-1.90-${{ hashFiles('app/src-tauri/Cargo.lock') }}
+      - run: npm ci --prefix app
+      - run: npm test --prefix app
+      - run: cargo +1.90.0 test --manifest-path app/src-tauri/Cargo.toml --locked
+      - name: Build Apple Silicon app
+        env:
+          RUSTUP_TOOLCHAIN: '1.90.0'
+        run: ./scripts/app-build --target aarch64-apple-darwin
+      - name: Verify and package
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./app/package.json').version")
+          test "$VERSION" = "$(node -p "require('./app/src-tauri/tauri.conf.json').version")"
+          APP=app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/pTerm.app
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
+          lipo -verify_arch arm64 "$APP/Contents/MacOS/pterm"
+          codesign --force --deep --sign - "$APP"
+          codesign --verify --deep --strict --verbose=2 "$APP"
+          mkdir -p release-assets
+          ditto -c -k --sequesterRsrc --keepParent "$APP" "release-assets/pTerm-$VERSION-macos-arm64.zip"
+          unzip -t "release-assets/pTerm-$VERSION-macos-arm64.zip"
+          cd release-assets
+          shasum -a 256 "pTerm-$VERSION-macos-arm64.zip" > SHA256SUMS.txt
+          shasum -a 256 -c SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pTerm-macos-arm64
+          path: release-assets/*
+          if-no-files-found: error
+      - name: Publish verified assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION=$(node -p "require('./app/package.json').version")
+          gh release create "v$VERSION" release-assets/* --target "$GITHUB_SHA" --title "pTerm $VERSION" --notes-file docs/release-1.1.0-public.md --draft
+          gh release edit "v$VERSION" --draft=false --latest
