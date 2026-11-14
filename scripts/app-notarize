@@ -1,0 +1,74 @@
+#!/usr/bin/env python3
+"""Notarize a signed app using a Keychain profile; package only after verification."""
+import argparse
+import hashlib
+import json
+import pathlib
+import subprocess
+import tempfile
+
+
+def run(*args, capture=False):
+    return subprocess.run(args, check=True, text=True,
+                          stdout=subprocess.PIPE if capture else None,
+                          stderr=subprocess.PIPE if capture else None)
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('app', type=pathlib.Path)
+    parser.add_argument('--profile', default='pTerm')
+    parser.add_argument('--submission-id', help='Resume a previous submission without uploading again')
+    parser.add_argument('--output', type=pathlib.Path,
+                        default=pathlib.Path(__file__).resolve().parent.parent / '.tools/signed-release')
+    args = parser.parse_args()
+    app = args.app.resolve(strict=True)
+    run('codesign', '--verify', '--deep', '--strict', str(app))
+    signature = run('codesign', '-d', '--verbose=4', str(app), capture=True).stderr
+    if 'Authority=Developer ID Application:' not in signature or '(runtime)' not in signature or 'Timestamp=' not in signature:
+        parser.error('App must have a timestamped Developer ID signature with Hardened Runtime.')
+    args.output.mkdir(parents=True, exist_ok=True)
+    submission_id = args.submission_id
+    if not submission_id:
+        with tempfile.TemporaryDirectory(prefix='pterm-notarize-') as folder:
+            archive = str(pathlib.Path(folder) / 'submission.zip')
+            run('ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), archive)
+            response = run('xcrun', 'notarytool', 'submit', archive, '--keychain-profile', args.profile,
+                           '--output-format', 'json', capture=True)
+            data = json.loads(response.stdout)
+            submission_id = data['id']
+            (args.output / f'notary-{submission_id}.json').write_text(response.stdout)
+    print(f'Submission: {submission_id}; resume with --submission-id {submission_id}', flush=True)
+    subprocess.run(['xcrun', 'notarytool', 'wait', submission_id, '--keychain-profile', args.profile, '--timeout', '10m'], check=False)
+    status = json.loads(run('xcrun', 'notarytool', 'info', submission_id,
+                            '--keychain-profile', args.profile, '--output-format', 'json', capture=True).stdout)
+    if status['status'] == 'In Progress':
+        raise SystemExit('Still processing. Resume with the submission ID printed above.')
+    if status['status'] != 'Accepted':
+        run('xcrun', 'notarytool', 'log', submission_id, '--keychain-profile', args.profile,
+            str(args.output / f'notary-{submission_id}-log.json'))
+        raise SystemExit(f"Notarization was not accepted: {status['status']}")
+    run('xcrun', 'stapler', 'staple', str(app))
+    run('xcrun', 'stapler', 'validate', str(app))
+    run('codesign', '--verify', '--deep', '--strict', str(app))
+    run('spctl', '--assess', '--type', 'execute', '--verbose=2', str(app))
+    version = run('/usr/libexec/PlistBuddy', '-c', 'Print CFBundleShortVersionString',
+                  str(app / 'Contents/Info.plist'), capture=True).stdout.strip()
+    architecture = run('lipo', '-archs', str(app / 'Contents/MacOS/pterm'), capture=True).stdout.strip().replace(' ', '-')
+    archive = args.output / f'pTerm-{version}-macos-{architecture}-notarized.zip'
+    if archive.exists():
+        raise SystemExit(f'Refusing to overwrite {archive}')
+    run('ditto', '-c', '-k', '--sequesterRsrc', '--keepParent', str(app), str(archive))
+    run('unzip', '-t', str(archive))
+    checksum = hashlib.sha256(archive.read_bytes()).hexdigest()
+    archive.with_suffix('.zip.sha256').write_text(f'{checksum}  {archive.name}\n')
+    print(f'Verified notarized archive: {archive}')
+
+
+if __name__ == '__main__':
+    try:
+        main()
+    except subprocess.CalledProcessError as error:
+        if error.stderr:
+            print(error.stderr)
+        raise SystemExit(error.returncode)

@@ -1,0 +1,11 @@
+#!/bin/sh
+set -eu
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+: "${APPLE_SIGNING_IDENTITY:?Set APPLE_SIGNING_IDENTITY to your Developer ID Application certificate name}"
+case "$APPLE_SIGNING_IDENTITY" in
+  'Developer ID Application: '*) ;;
+  *) echo 'A Developer ID Application identity is required.' >&2; exit 1 ;;
+esac
+export APPLE_SIGNING_IDENTITY
+# Keep the ordinary development build independent of a particular Apple team.
+exec "$ROOT/scripts/app-build" --config '{"bundle":{"macOS":{"hardenedRuntime":true}}}' "$@"
