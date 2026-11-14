@@ -1,5 +1,11 @@
 # 변경 이력
 
+## 1.1.4
+
+- GitHub Actions에서 Developer ID 서명, Hardened Runtime, Apple 공증 적용
+- 공증 티켓·서명·Gatekeeper 검증을 통과한 앱만 배포
+- 기존 Bundle ID와 Vault 데이터를 유지해 정식 서명 앱의 신원을 일관되게 관리
+
 ## 1.1.3
 
 - 호스트 모달 보조 버튼 스타일 통일, 고급 설정을 연결 버튼 위로 이동

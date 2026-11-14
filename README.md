@@ -1,16 +1,16 @@
-# pTerm 1.1.3
+# pTerm 1.1.4
 
 macOS용 로컬·SSH 통합 터미널. Tauri 2, React/TypeScript, Rust, xterm.js로 구현했습니다.
 
-**pTerm 1.1.3을 공개했습니다.** 기존 Polarsh의 기능을 이어받아 별도 저장소와 버전 체계로 시작합니다. [이름 변경과 호환성](docs/pterm-rename.md)
+**pTerm 1.1.4는 Developer ID 서명·Apple 공증을 적용한 배포 버전입니다.** 기존 Polarsh의 기능을 이어받아 별도 저장소와 버전 체계로 시작합니다. [이름 변경과 호환성](docs/pterm-rename.md)
 
-[앱 다운로드](https://github.com/Polar-Little-Lab/pTerm/releases/tag/v1.1.3) · [버전별 변경 이력](CHANGELOG.md) · [스크린샷 사용 가이드](docs/user-guide.md)
+[앱 다운로드](https://github.com/Polar-Little-Lab/pTerm/releases/tag/v1.1.4) · [버전별 변경 이력](CHANGELOG.md) · [스크린샷 사용 가이드](docs/user-guide.md)
 
-실행 앱은 릴리스의 `pTerm-1.1.3-macos-arm64.zip`을 사용하세요. Apple Silicon용이며 공개 릴리스에서 다운로드할 수 있습니다.
+실행 앱은 릴리스의 `pTerm-1.1.4-macos-arm64.zip`을 사용하세요. Apple Silicon용이며 공개 릴리스에서 다운로드할 수 있습니다.
 
 ## 첫 실행이 차단되나요?
 
-“Apple은 악성 코드가 없음을 확인할 수 없습니다”라는 경고가 나오면, 공식 릴리스에서 받은 앱인지 확인한 뒤 **시스템 설정 → 개인정보 보호 및 보안 → 그래도 열기**로 해당 앱을 허용할 수 있습니다.
+1.1.4 정식 릴리스는 Apple 공증과 Gatekeeper 검증 후 배포합니다. 이전 ad-hoc 버전의 실행 경고 및 기존 Keychain 접근 재승인은 아래 안내를 참고하세요.
 
 [첫 실행 경고 해결 방법](docs/macos-first-launch.md) — 단계별 실행 절차, 버튼이 보이지 않는 경우와 인증 안내.
 
@@ -55,7 +55,7 @@ REA나 Termius 설치는 앱 실행·빌드에 필요하지 않습니다. 브라
 ./scripts/app-build --debug
 ```
 
-결과물은 `app/src-tauri/target/release/bundle/macos/pTerm.app`이며, `--debug` 사용 시 `release` 대신 `debug` 디렉터리에 생성됩니다. Apple Developer ID 서명과 공증은 포함하지 않습니다. v1.1.3 릴리스에는 소스와 ad-hoc 서명된 Apple Silicon용 앱 ZIP을 함께 제공합니다.
+결과물은 `app/src-tauri/target/release/bundle/macos/pTerm.app`이며, `--debug` 사용 시 `release` 대신 `debug` 디렉터리에 생성됩니다. 이 일반 빌드 명령에는 Apple Developer ID 서명과 공증이 포함되지 않습니다. 공식 1.1.4 릴리스는 GitHub Actions에서 별도로 서명·공증한 Apple Silicon용 앱 ZIP을 제공합니다.
 
 Developer ID 인증서를 보유한 배포자는 별도의 `scripts/app-build-signed`와 `scripts/app-notarize`를 사용합니다. [Apple 서명·공증 설정](docs/apple-signing.md)
 
