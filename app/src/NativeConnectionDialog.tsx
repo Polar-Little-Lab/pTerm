@@ -123,12 +123,15 @@ export function NativeConnectionDialog({
           style={{ flex: 1 }}
           value={String(request[key] || "")}
           placeholder={placeholder}
+          autoCapitalize="none"
+          autoCorrect="off"
+          spellCheck={false}
           disabled={
             !!profileId &&
             !editingProfile &&
             ["username", "identity", "certificate", "provider"].includes(key)
           }
-          onChange={(e) => change(key, e.target.value)}
+          onChange={(e) => change(key, key === "host" ? e.target.value.trim() : e.target.value)}
         />
         {[
           "executable",
