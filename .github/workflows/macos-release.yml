@@ -6,6 +6,11 @@ on:
       - '.github/workflows/macos-release.yml'
       - 'app/src-tauri/tauri.conf.json'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish a new version after signing and notarization'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -19,6 +24,23 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v4
+      - name: Check Apple signing secrets
+        shell: bash
+        env:
+          APPLE_CERTIFICATE_P12_BASE64: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          for name in APPLE_CERTIFICATE_P12_BASE64 APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_API_KEY_BASE64 APPLE_API_KEY_ID APPLE_API_ISSUER; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing Actions secret: $name"
+              exit 1
+            fi
+          done
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
@@ -35,10 +57,23 @@ jobs:
       - run: npm ci --prefix app
       - run: npm test --prefix app
       - run: cargo +1.90.0 test --manifest-path app/src-tauri/Cargo.toml --locked
-      - name: Build Apple Silicon app
+      - name: Build, sign and notarize Apple Silicon app
+        shell: bash
         env:
           RUSTUP_TOOLCHAIN: '1.90.0'
-        run: ./scripts/app-build --target aarch64-apple-darwin
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE_P12_BASE64 }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          export APPLE_API_KEY_PATH="$RUNNER_TEMP/pterm-notary-key.p8"
+          trap 'rm -f "$APPLE_API_KEY_PATH"' EXIT
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$APPLE_API_KEY_PATH"
+          ./scripts/app-build-signed --target aarch64-apple-darwin
       - name: Verify and package
         shell: bash
         run: |
@@ -48,8 +83,13 @@ jobs:
           APP=app/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/pTerm.app
           test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleShortVersionString' "$APP/Contents/Info.plist")" = "$VERSION"
           lipo "$APP/Contents/MacOS/pterm" -verify_arch arm64
-          codesign --force --deep --sign - "$APP"
           codesign --verify --deep --strict --verbose=2 "$APP"
+          SIGNATURE=$(codesign --display --verbose=4 "$APP" 2>&1)
+          printf '%s\n' "$SIGNATURE" | grep -F 'Authority=Developer ID Application:'
+          printf '%s\n' "$SIGNATURE" | grep -F '(runtime)'
+          printf '%s\n' "$SIGNATURE" | grep -F 'Timestamp='
+          xcrun stapler validate "$APP"
+          spctl --assess --type execute --verbose=2 "$APP"
           mkdir -p release-assets
           ditto -c -k --sequesterRsrc --keepParent "$APP" "release-assets/pTerm-$VERSION-macos-arm64.zip"
           unzip -t "release-assets/pTerm-$VERSION-macos-arm64.zip"
@@ -62,6 +102,7 @@ jobs:
           path: release-assets/*
           if-no-files-found: error
       - name: Publish verified assets
+        if: github.event_name == 'push' || inputs.publish
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash

@@ -57,6 +57,8 @@ REA나 Termius 설치는 앱 실행·빌드에 필요하지 않습니다. 브라
 
 결과물은 `app/src-tauri/target/release/bundle/macos/pTerm.app`이며, `--debug` 사용 시 `release` 대신 `debug` 디렉터리에 생성됩니다. Apple Developer ID 서명과 공증은 포함하지 않습니다. v1.1.3 릴리스에는 소스와 ad-hoc 서명된 Apple Silicon용 앱 ZIP을 함께 제공합니다.
 
+Developer ID 인증서를 보유한 배포자는 별도의 `scripts/app-build-signed`와 `scripts/app-notarize`를 사용합니다. [Apple 서명·공증 설정](docs/apple-signing.md)
+
 ## 검증
 
 ```sh
