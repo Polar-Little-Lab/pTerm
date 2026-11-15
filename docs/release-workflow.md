@@ -7,3 +7,5 @@
 수정은 1.0.1, 기능 추가는 1.1.0으로 올립니다. 배포된 태그와 파일은 덮어쓰지 않습니다.
 package.json·package-lock.json·Cargo.toml·Cargo.lock·tauri.conf.json·화면 버전을 맞춘 뒤 JS/Rust 테스트와 앱 빌드를 검증합니다. 앱 ZIP과 SHA-256 체크섬을 릴리스에 올립니다.
 Polarsh의 과거 브랜치·태그는 기존 저장소에서 보존합니다.
+
+현재 공통 절차는 [release-process.md](release-process.md)를 따릅니다. 위 1.0 브랜치 설명은 초기 릴리스의 기록입니다.
