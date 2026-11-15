@@ -1,0 +1,9 @@
+{
+  "product": "pTerm",
+  "package": "app/package.json",
+  "lock": "app/package-lock.json",
+  "notes": "docs/release-{version}-public.md",
+  "tauri": "app/src-tauri/tauri.conf.json",
+  "cargo": "app/src-tauri/Cargo.toml",
+  "cargoLock": "app/src-tauri/Cargo.lock"
+}
